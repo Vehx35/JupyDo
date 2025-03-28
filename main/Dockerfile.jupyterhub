@@ -9,10 +9,11 @@ RUN apt-get update && apt-get install -y \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 RUN npm install -g configurable-http-proxy
+
 RUN mkdir -p /etc/jupyterhub
 RUN python3 -m jupyterhub --generate-config -f /etc/jupyterhub/jupyterhub_config.py
-RUN echo 'c.JupyterHub.authenticator_class = "native"' >> /etc/jupyterhub/jupyterhub_config.py
-    
+
+RUN echo 'c.JupyterHub.authenticator_class = "native"' >> /etc/jupyterhub/jupyterhub_config.py  
 RUN echo 'import os, nativeauthenticator' >> /etc/jupyterhub/jupyterhub_config.py 
 RUN echo 'c.JupyterHub.template_paths = [f"{os.path.dirname(nativeauthenticator.__file__)}/templates/"]' >> /etc/jupyterhub/jupyterhub_config.py
 
@@ -20,5 +21,7 @@ RUN useradd -m limo
 ENV HOME=/home/limo
 WORKDIR $HOME
 USER limo
+
+EXPOSE 8000
 
 CMD ["python3", "-m", "jupyterhub", "-f", "/etc/jupyterhub/jupyterhub_config.py"]
