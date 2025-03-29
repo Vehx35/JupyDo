@@ -1,27 +1,33 @@
 FROM python:3.9
-RUN pip3 install \
-    'jupyterhub==5.2.1' \
-    'notebook==7.3.3' \
+RUN python3 -m pip install \
+    'jupyterhub' \
+    'notebook' \
     'jupyterhub-nativeauthenticator' 
 
 RUN apt-get update && apt-get install -y \
     npm && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 RUN npm install -g configurable-http-proxy
 
+
+# Create the directory for JupyterHub configuration
 RUN mkdir -p /etc/jupyterhub
-RUN python3 -m jupyterhub --generate-config -f /etc/jupyterhub/jupyterhub_config.py
 
-RUN echo 'c.JupyterHub.authenticator_class = "native"' >> /etc/jupyterhub/jupyterhub_config.py  
-RUN echo 'import os, nativeauthenticator' >> /etc/jupyterhub/jupyterhub_config.py 
-RUN echo 'c.JupyterHub.template_paths = [f"{os.path.dirname(nativeauthenticator.__file__)}/templates/"]' >> /etc/jupyterhub/jupyterhub_config.py
+# Copy the JupyterHub configuration file to the created directory
+COPY jupyterhub_config.py /etc/jupyterhub/jupyterhub_config.py
 
-RUN useradd -m limo
+# Set the working directory
+WORKDIR /etc/jupyterhub
+
+RUN useradd -m -s /bin/bash limo
 ENV HOME=/home/limo
 WORKDIR $HOME
 USER limo
 
+# The EXPOSE instruction documents the port, but you must publish it when running the container.
+# Use: docker run -p 8000:8000
 EXPOSE 8000
 
 CMD ["python3", "-m", "jupyterhub", "-f", "/etc/jupyterhub/jupyterhub_config.py"]
