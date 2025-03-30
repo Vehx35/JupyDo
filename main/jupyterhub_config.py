@@ -13,7 +13,7 @@ c.JupyterHub.authenticator_class = 'nativeauthenticator.NativeAuthenticator'
 c.NativeAuthenticator.open_signup = False
 
 # Allowed admins
-admin = 'giovanni'
+admin = 'admin_user'  # Replace with your admin username
 c.Authenticator.admin_users = {admin}
 
 # Allow all signed-up users to login
