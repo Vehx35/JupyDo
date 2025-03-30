@@ -1,7 +1,7 @@
 # JupyDo
 ## A JupyterHub Docker Spawner
 
-![JupyDo Logo](https://i.imgur.com/7AEEHWD.jpeg "JupyDo Logo")
+![JupyDo Logo](https://i.imgur.com/HPr8Jax.jpeg "JupyDo Logo")
 
 # ⚠️ **Attention:** This project is a work in progress (WIP). Features and documentation are subject to change.
 
