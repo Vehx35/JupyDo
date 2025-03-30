@@ -1,7 +1,9 @@
+<div align="center">
+    <img src="https://i.imgur.com/HPr8Jax.jpeg" alt="JupyDo Logo" title="JupyDo Logo" width="200">
+</div>
+
 # JupyDo
 ## A JupyterHub Docker Spawner
-
-![JupyDo Logo](https://i.imgur.com/HPr8Jax.jpeg "JupyDo Logo")
 
 # ⚠️ **Attention:** This project is a work in progress (WIP). Features and documentation are subject to change.
 
