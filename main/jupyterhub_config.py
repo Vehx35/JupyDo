@@ -21,10 +21,6 @@ c.JupyterHub.spawner_class = DockerSpawner
 c.NativeAuthenticator.create_system_users = True
 
 #trying to make it work
-from jupyter_client.localinterfaces import public_ips
-
-c.JupyterHub.hub_ip = public_ips()[0]
-
 c.JupyterHub.log_level = 'DEBUG'
 
 c.DockerSpawner.network_name = 'jupyterhub_network'
