@@ -2,7 +2,9 @@ FROM python:3.9
 RUN python3 -m pip install \
     'jupyterhub' \
     'notebook' \
-    'jupyterhub-nativeauthenticator' 
+    'jupyterhub-nativeauthenticator' \
+    'dockerspawner' \
+    --upgrade 'jupyterlab'
 
 RUN apt-get update && apt-get install -y \
     npm && \
