@@ -1,40 +1,61 @@
 # Configuration file for JupyterHub
-import os, nativeauthenticator
+import os
 from dockerspawner import DockerSpawner
+import nativeauthenticator
+
+# Define the custom spawner class
+class DemoFormSpawner(DockerSpawner):
+    def _options_form_default(self):
+        default_stack = "jupyter/minimal-notebook"
+        return """
+        <label for="stack">Select your desired stack</label>
+        <select name="stack" size="1">
+        <option value="jupyter/r-notebook">R: </option>
+        <option value="jupyter/tensorflow-notebook">Tensorflow: </option>
+        <option value="jupyter/datascience-notebook">Datascience: </option>
+        <option value="jupyter/all-spark-notebook">Spark: </option>
+        </select>
+        """.format(stack=default_stack)
+
+    def options_from_form(self, formdata):
+        options = {}
+        options['stack'] = formdata['stack']
+        container_image = ''.join(formdata['stack'])
+        print("SPAWN: " + container_image + " IMAGE")
+        self.image = container_image  # Set the selected image
+        return options
+
 c.JupyterHub.template_paths = [f"{os.path.dirname(nativeauthenticator.__file__)}/templates/"]
-c = get_config()  # noqa: F821
 
 # Basic JupyterHub configuration
+c = get_config()  # noqa: F821
 c.JupyterHub.bind_url = 'http://:8000'
 c.JupyterHub.hub_ip = '0.0.0.0'
 
-# Possibility to enable named servers
-#c.JupyterHub.allow_named_servers = True
+# Use the custom spawner
+c.JupyterHub.spawner_class = DemoFormSpawner
 
-# Authenticate users with Native Authenticator
-c.JupyterHub.authenticator_class = 'nativeauthenticator.NativeAuthenticator'
-
-# Require admin approval for users to login
-c.NativeAuthenticator.open_signup = False
-
-c.JupyterHub.spawner_class = DockerSpawner
-c.NativeAuthenticator.create_system_users = True
-
-#trying to make it work
-c.JupyterHub.log_level = 'DEBUG'
-
+# DockerSpawner configuration
 c.DockerSpawner.network_name = 'jupyterhub_network'
 c.JupyterHub.hub_connect_ip = 'jupyterhub'  # Use the container name of the JupyterHub instance
 
-
+# Notebook directory and volumes
 notebook_dir = '/home/jovyan/work'
 c.DockerSpawner.notebook_dir = notebook_dir
 c.DockerSpawner.volumes = { 'jupyterhub-user-{username}': notebook_dir }
-c.DockerSpawner.image = "jupyter/datascience-notebook:latest"
+
+# Debugging
+c.JupyterHub.log_level = 'DEBUG'
+
+# Authenticate users with Native Authenticator
+c.JupyterHub.authenticator_class = 'nativeauthenticator.NativeAuthenticator'
+c.NativeAuthenticator.open_signup = False
+c.NativeAuthenticator.create_system_users = True
 
 # Allowed admins
 admin = 'limo'  # Replace with your admin username
-c.Authenticator.admin_users = {admin} # For some reason, admin user is not being allowed by default
-
-# Allow all signed-up users to login
+c.Authenticator.admin_users = {admin}
 c.Authenticator.allow_all = True
+
+# Enable named servers (commented out)
+# c.JupyterHub.allow_named_servers = True  # Allow users to create multiple named servers
