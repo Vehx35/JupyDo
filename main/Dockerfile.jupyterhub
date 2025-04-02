@@ -23,11 +23,6 @@ COPY jupyterhub_config.py /etc/jupyterhub/jupyterhub_config.py
 # Set the working directory
 WORKDIR /etc/jupyterhub
 
-RUN useradd -m -s /bin/bash limo
-ENV HOME=/home/limo
-WORKDIR $HOME
-USER limo
-
 # The EXPOSE instruction documents the port, but you must publish it when running the container.
 # Use: docker run -p 8000:8000
 EXPOSE 8000

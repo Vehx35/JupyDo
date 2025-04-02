@@ -1,5 +1,6 @@
 # Configuration file for JupyterHub
 import os, nativeauthenticator
+from dockerspawner import DockerSpawner
 c.JupyterHub.template_paths = [f"{os.path.dirname(nativeauthenticator.__file__)}/templates/"]
 c = get_config()  # noqa: F821
 
@@ -15,6 +16,15 @@ c.JupyterHub.authenticator_class = 'nativeauthenticator.NativeAuthenticator'
 
 # Require admin approval for users to login
 c.NativeAuthenticator.open_signup = False
+
+c.JupyterHub.spawner_class = DockerSpawner
+c.NativeAuthenticator.create_system_users = True
+
+
+notebook_dir = '/home/jovyan/work'
+c.DockerSpawner.notebook_dir = notebook_dir
+c.DockerSpawner.volumes = { 'jupyterhub-user-{username}': notebook_dir }
+c.DockerSpawner.image = "jupyter/datascience-notebook:latest"
 
 # Allowed admins
 admin = 'limo'  # Replace with your admin username
