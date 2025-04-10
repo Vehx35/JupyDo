@@ -6,24 +6,47 @@ import nativeauthenticator
 # Define the custom spawner class
 class DemoFormSpawner(DockerSpawner):
     def _options_form_default(self):
-        default_stack = "jupyter/minimal-notebook"
+        # Check if the user has already selected an image
+        if self.user_options.get('image_selected', False):
+            return ""  # No form is shown if the image is already selected
+
+        # Show the form for selecting an image with JupyterHub's theme and an intuitive arrow
         return """
-        <label for="stack">Select your desired stack</label>
-        <select name="stack" size="1">
-        <option value="jupyter/r-notebook">R: </option>
-        <option value="jupyter/tensorflow-notebook">Tensorflow: </option>
-        <option value="jupyter/datascience-notebook">Datascience: </option>
-        <option value="jupyter/all-spark-notebook">Spark: </option>
-        </select>
-        """.format(stack=default_stack)
+        <div class="form-group">
+            <label for="stack" class="form-label">Select your desired stack:</label>
+            <select name="stack" class="form-select" size="1">
+                <option value="">-- Select an image --</option>
+                <option value="jupyter/r-notebook">R</option>
+                <option value="jupyter/tensorflow-notebook">Tensorflow</option>
+                <option value="jupyter/datascience-notebook">Datascience</option>
+                <option value="jupyter/all-spark-notebook">Spark</option>
+            </select>
+        </div>
+        <br>
+        """
 
     def options_from_form(self, formdata):
         options = {}
-        options['stack'] = formdata['stack']
-        container_image = ''.join(formdata['stack'])
-        print("SPAWN: " + container_image + " IMAGE")
-        self.image = container_image  # Set the selected image
+        # Get the selected stack from the dropdown
+        selected_stack = formdata.get('stack', [''])[0]
+
+        # Ensure a stack is selected
+        if not selected_stack:
+            raise ValueError("You must select a stack to proceed.")
+
+        print("SPAWN: " + selected_stack + " IMAGE")
+        self.image = selected_stack  # Set the selected image
+
+        # Store the selected image in user options to avoid asking again
+        options['image_selected'] = True
+        options['stack'] = selected_stack
         return options
+
+    def start(self):
+        # Use the previously selected image if available
+        if 'stack' in self.user_options:
+            self.image = self.user_options['stack']
+        return super().start()
 
 c.JupyterHub.template_paths = [f"{os.path.dirname(nativeauthenticator.__file__)}/templates/"]
 
@@ -57,5 +80,5 @@ admin = 'limo'  # Replace with your admin username
 c.Authenticator.admin_users = {admin}
 c.Authenticator.allow_all = True
 
-# Enable named servers (commented out)
+# Enable named servers (still in the tests)
 # c.JupyterHub.allow_named_servers = True  # Allow users to create multiple named servers
