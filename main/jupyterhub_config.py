@@ -59,7 +59,7 @@ c.JupyterHub.hub_ip = '0.0.0.0'
 c.JupyterHub.spawner_class = DemoFormSpawner
 
 # DockerSpawner configuration
-c.DockerSpawner.network_name = 'jupyterhub_network'
+c.DockerSpawner.network_name = 'main_jupyterhub_network'
 c.JupyterHub.hub_connect_ip = 'jupyterhub'  # Use the container name of the JupyterHub instance
 
 # Notebook directory and volumes
