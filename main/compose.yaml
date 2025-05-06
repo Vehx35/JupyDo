@@ -1,0 +1,20 @@
+services:
+  jupyterhub:
+    build:
+      context: . # Indicates the current directory as the build context
+      dockerfile: Dockerfile.jupyterhub # Specifies the Dockerfile name
+    container_name: jupyterhub #container name
+    ports:
+      - "8000:8000" # exposes the JupyterHub service on port 8000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock # Lets dockerspawn use the Docker socket
+      - ${HOME}/jupyterhub_data:/etc/jupyterhub # Persistent data jupyterhub
+    networks:
+      - jupyterhub_network
+    restart: always # Restart the container if it stops
+
+networks:
+  jupyterhub_network:
+    driver: bridge # Create a bridge network for the JupyterHub service.
+             # This allows the JupyterHub service to communicate with other services on the same network
+             # and provides isolation from other containers on the host.
