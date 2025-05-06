@@ -80,5 +80,8 @@ admin = 'limo'  # Replace with your admin username
 c.Authenticator.admin_users = {admin}
 c.Authenticator.allow_all = True
 
+# Increase the spawner start timeout (default is 60 seconds)
+c.Spawner.start_timeout = 120  # Set to 120 seconds or any desired value
+
 # Enable named servers (still in the tests)
 # c.JupyterHub.allow_named_servers = True  # Allow users to create multiple named servers
