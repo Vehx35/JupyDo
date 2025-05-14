@@ -10,11 +10,16 @@ class DemoFormSpawner(DockerSpawner):
         <div class="form-group">
             <label for="stack" class="form-label">Select your desired stack:</label>
             <select name="stack" class="form-select" size="1">
+                <option value="">-- Select a stack --</option>
                 <option value="jupyter/r-notebook">R</option>
                 <option value="jupyter/tensorflow-notebook">Tensorflow</option>
                 <option value="jupyter/datascience-notebook">Datascience</option>
                 <option value="jupyter/all-spark-notebook">Spark</option>
             </select>
+        </div>
+        <div class="form-group" style="margin-top:10px;">
+            <label for="custom_image" class="form-label">Or add image and name:</label>
+            <input type="text" name="custom_image" class="form-control" placeholder="e.g. myrepo/myimage:tag">
         </div>
         <br>
         """
@@ -22,10 +27,15 @@ class DemoFormSpawner(DockerSpawner):
     def options_from_form(self, formdata):
         options = {}
         selected_stack = formdata.get('stack', [''])[0]
-        if not selected_stack:
-            raise ValueError("You must select a stack to proceed.")
-        self.image = selected_stack
-        options['stack'] = selected_stack
+        custom_image = formdata.get('custom_image', [''])[0].strip()
+        if custom_image:
+            self.image = custom_image
+            options['stack'] = custom_image
+        elif selected_stack:
+            self.image = selected_stack
+            options['stack'] = selected_stack
+        else:
+            raise ValueError("You must select a stack or provide a custom image.")
         return options
 
     def start(self):
