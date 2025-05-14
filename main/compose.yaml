@@ -15,7 +15,7 @@ services:
 
 networks:
   jupyterhub_network:
-    external: true # Indicates that the network is not managed externally
-     # Create a bridge network for the JupyterHub service.
+    external: true # Indicates that the network is managed externally
+     # uses a bridge network
              # This allows the JupyterHub service to communicate with other services on the same network
              # and provides isolation from other containers on the host.
