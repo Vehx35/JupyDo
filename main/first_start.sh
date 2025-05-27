@@ -3,12 +3,6 @@
 # first_start.sh - Initialization script
 
 echo "Initialization script started."
-
-# Check if the script is run as root
-if [ "$(id -u)" -ne 0 ]; then
-    echo "This script must be run as root. Please use sudo."
-    exit 1
-fi
 # Check if docker is installed
 if ! command -v docker &> /dev/null; then
     echo "Docker is not installed. Please install Docker first."
@@ -32,32 +26,47 @@ read start_jupyterhub
 if [ "$start_jupyterhub" == "y" ]; then
     echo "Starting JupyterHub server..."
 
-    echo "Creating directories..."
-    mkdir -p /srv/JupyDo
-    mkdir -p /srv/JupyDo/jupyterhub_data
+    echo "Inserisci la cartella parent dove creare JupyDo (lascia vuoto per default: /srv):"
+    read JUPYDO_PATH
+    if [ -z "$JUPYDO_PATH" ]; then
+        JUPYDO_PATH="/srv"
+    fi
+    JUPYDO_FULL_PATH="$JUPYDO_PATH/JupyDo"
 
-    if test -d /srv/JupyDo/jupyterhub_data; then
-        echo "Directory /srv/JupyDo/jupyterhub_data successfully created."
+    echo "Creating directories..."
+    mkdir -p "$JUPYDO_FULL_PATH"
+    mkdir -p "$JUPYDO_FULL_PATH/jupyterhub_data"
+
+    if test -d "$JUPYDO_FULL_PATH/jupyterhub_data"; then
+        echo "Directory $JUPYDO_FULL_PATH/jupyterhub_data successfully created."
     else
-        echo "Directory /srv/JupyDo/jupyterhub_data could not be created. Error. Exiting script."
+        echo "Directory $JUPYDO_FULL_PATH/jupyterhub_data could not be created. Error. Exiting script."
         exit 1
     fi
 
-    # Copying configuration files
+    # Copying configuration files with path replacement
     echo "Copying configuration files..."
-    cp -r ./jupyterhub_config.py /srv/JupyDo/jupyterhub_data/
-    if test -f /srv/JupyDo/jupyterhub_data/jupyterhub_config.py; then
-        echo "Configuration file jupyterhub_config.py successfully copied."
+    sed "s|/srv/JupyDo|$JUPYDO_FULL_PATH|g" ./jupyterhub_config.py > "$JUPYDO_FULL_PATH/jupyterhub_data/jupyterhub_config.py"
+    if test -f "$JUPYDO_FULL_PATH/jupyterhub_data/jupyterhub_config.py"; then
+        echo "Configuration file jupyterhub_config.py successfully copied and updated."
     else
         echo "Configuration file jupyterhub_config.py could not be copied. Error. Exiting script."
         exit 1
     fi
 
+    # Update compose.yaml with the chosen path (backup and restore at the end)
+    cp compose.yaml compose.yaml.bak
+    sed "s|/srv/JupyDo/jupyterhub_data|$JUPYDO_FULL_PATH/jupyterhub_data|g" compose.yaml.bak > compose.yaml
+
     # Launching Compose
     echo "Launching Docker Compose..."
     docker compose up -d --build
 
-    echo "JupyterHub server started."
+    # Restore original compose.yaml
+    mv compose.yaml.bak compose.yaml
+    rm -f compose.yaml.bak
+
+    echo "JupyterHub server started. compose.yaml ripristinato."
 else
     echo "You can start the JupyterHub server later using 'docker-compose up -d --build'."
 fi
