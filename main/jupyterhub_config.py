@@ -74,7 +74,7 @@ notebook_dir = '/home/jovyan/work'
 c.DockerSpawner.notebook_dir = notebook_dir
 c.DockerSpawner.volumes = {
     'jupyterhub-user-{username}': notebook_dir,
-    '$USER_HOME/JupyDo/jh_shared/{username}_shared': '/home/jovyan/work/shared'
+    '/srv/JupyDo/jh_shared/{username}_shared': '/home/jovyan/work/shared'
 }
 
 # Enable named servers (still in the tests)

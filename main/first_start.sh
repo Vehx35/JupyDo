@@ -33,20 +33,20 @@ if [ "$start_jupyterhub" == "y" ]; then
     echo "Starting JupyterHub server..."
 
     echo "Creating directories..."
-    mkdir -p $USER_HOME/JupyDo
-    mkdir -p $USER_HOME/JupyDo/jupyterhub_data
+    mkdir -p /srv/JupyDo
+    mkdir -p /srv/JupyDo/jupyterhub_data
 
-    if test -d $USER_HOME/JupyDo/jupyterhub_data; then
-        echo "Directory $USER_HOME/JupyDo/jupyterhub_data successfully created."
+    if test -d /srv/JupyDo/jupyterhub_data; then
+        echo "Directory /srv/JupyDo/jupyterhub_data successfully created."
     else
-        echo "Directory $USER_HOME/JupyDo/jupyterhub_data could not be created. Error. Exiting script."
+        echo "Directory /srv/JupyDo/jupyterhub_data could not be created. Error. Exiting script."
         exit 1
     fi
 
     # Copying configuration files
     echo "Copying configuration files..."
-    cp -r ./jupyterhub_config.py $USER_HOME/JupyDo/jupyterhub_data/
-    if test -f $USER_HOME/JupyDo/jupyterhub_data/jupyterhub_config.py; then
+    cp -r ./jupyterhub_config.py /srv/JupyDo/jupyterhub_data/
+    if test -f /srv/JupyDo/jupyterhub_data/jupyterhub_config.py; then
         echo "Configuration file jupyterhub_config.py successfully copied."
     else
         echo "Configuration file jupyterhub_config.py could not be copied. Error. Exiting script."

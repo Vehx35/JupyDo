@@ -8,7 +8,7 @@ services:
       - "8000:8000" # exposes the JupyterHub service on port 8000
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock # Lets dockerspawn use the Docker socket
-      - ${HOME}/JupyDo/jupyterhub_data:/etc/jupyterhub # Persistent data jupyterhub
+      - /srv/JupyDo/jupyterhub_data:/etc/jupyterhub # Persistent data jupyterhub
     networks:
       - jupyterhub_network
     restart: always # Restart the container if it stops
