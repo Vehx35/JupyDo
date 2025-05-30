@@ -26,11 +26,22 @@ read start_jupyterhub
 if [ "$start_jupyterhub" == "y" ]; then
     echo "Starting JupyterHub server..."
 
-    echo "Inserisci la cartella parent dove creare JupyDo (lascia vuoto per default: /srv):"
-    read JUPYDO_PATH
-    if [ -z "$JUPYDO_PATH" ]; then
-        JUPYDO_PATH="/srv"
-    fi
+    while true; do
+        echo "Inserisci la cartella parent dove creare JupyDo (lascia vuoto per default: ~/JupyDo oppure inserisci un percorso che inizi con ~ ):"
+        read JUPYDO_PATH
+        if [ -z "$JUPYDO_PATH" ]; then
+            JUPYDO_PATH=~
+            break
+        fi
+        # Controlla che inizi con ~
+        if [[ "$JUPYDO_PATH" == ~* ]]; then
+            JUPYDO_PATH=$(eval echo "$JUPYDO_PATH")
+            break
+        else
+            echo "Errore: il percorso personalizzato deve iniziare con ~ (tilde). Riprova."
+        fi
+    done
+    JUPYDO_PATH="${JUPYDO_PATH%/}"  # Rimuove eventuale slash finale
     JUPYDO_FULL_PATH="$JUPYDO_PATH/JupyDo"
 
     echo "Creating directories..."
