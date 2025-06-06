@@ -27,13 +27,13 @@ if [ "$start_jupyterhub" == "y" ]; then
     echo "Starting JupyterHub server..."
 
     while true; do
-        echo "Inserisci la cartella parent dove creare JupyDo (lascia vuoto per default: ~/JupyDo oppure inserisci un percorso che inizi con ~ ):"
+        echo "Enter the parent folder where to create JupyDo (leave empty for default: ~/JupyDo or enter a path starting with ~ ):"
         read JUPYDO_PATH
         if [ -z "$JUPYDO_PATH" ]; then
             JUPYDO_PATH=~
             break
         fi
-        # Controlla che inizi con ~
+        # Check that it starts with ~
         if [[ "$JUPYDO_PATH" == ~* ]]; then
             JUPYDO_PATH=$(eval echo "$JUPYDO_PATH")
             break
@@ -41,7 +41,7 @@ if [ "$start_jupyterhub" == "y" ]; then
             echo "Errore: il percorso personalizzato deve iniziare con ~ (tilde). Riprova."
         fi
     done
-    JUPYDO_PATH="${JUPYDO_PATH%/}"  # Rimuove eventuale slash finale
+    JUPYDO_PATH="${JUPYDO_PATH%/}"  # Removes any trailing slash
     JUPYDO_FULL_PATH="$JUPYDO_PATH/JupyDo"
 
     echo "Creating directories..."
@@ -54,10 +54,15 @@ if [ "$start_jupyterhub" == "y" ]; then
         echo "Directory $JUPYDO_FULL_PATH/jupyterhub_data could not be created. Error. Exiting script."
         exit 1
     fi
+    echo "Enter the username for the initial admin user (default: limo):"
+    read ADMIN_USER
+    if [ -z "$ADMIN_USER" ]; then
+        ADMIN_USER="limo"
+    fi
 
-    # Copying configuration files with path replacement
+    # Copying configuration files with path replacement and admin replacement
     echo "Copying configuration files..."
-    sed "s|/srv/JupyDo|$JUPYDO_FULL_PATH|g" ./jupyterhub_config.py > "$JUPYDO_FULL_PATH/jupyterhub_data/jupyterhub_config.py"
+    sed "s|/srv/JupyDo|$JUPYDO_FULL_PATH|g; s|admin = 'limo'|admin = '$ADMIN_USER'|g" ./jupyterhub_config.py > "$JUPYDO_FULL_PATH/jupyterhub_data/jupyterhub_config.py"
     if test -f "$JUPYDO_FULL_PATH/jupyterhub_data/jupyterhub_config.py"; then
         echo "Configuration file jupyterhub_config.py successfully copied and updated."
     else

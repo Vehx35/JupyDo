@@ -105,6 +105,9 @@ c.NativeAuthenticator.allowed_failed_logins = 0
 # Set timer between failed login attempts
 c.NativeAuthenticator.seconds_before_next_try = 0
 
+# Password complexity
+c.NativeAuthenticator.check_common_password = True
+c.NativeAuthenticator.minimum_password_length = 7
 
 
 
