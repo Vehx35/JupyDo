@@ -4,11 +4,8 @@
 
 # Ensure script runs as root
 if [ "$EUID" -ne 0 ]; then
-  echo "⚠️  This script must be run as root. Relaunching with sudo..."
   exec sudo "$0" "$@"
 fi
-
-echo "Initialization script started."
 
 # Detect real user (even if run with sudo)
 REAL_USER=${SUDO_USER:-$USER}
@@ -47,33 +44,45 @@ read start_jupyterhub
 if [ "$start_jupyterhub" == "y" ]; then
     echo "Starting JupyterHub server..."
 
-    while true; do
-        echo "Enter the parent folder where to create JupyDo (leave empty for default: ~/JupyDo or enter a path starting with ~ ):"
-        read JUPYDO_PATH
-        if [ -z "$JUPYDO_PATH" ]; then
-            JUPYDO_PATH="$REAL_HOME"
-            break
-        fi
-        if [[ "$JUPYDO_PATH" == ~* ]]; then
-            JUPYDO_PATH=$(eval echo "$JUPYDO_PATH")
-            break
-        else
-            echo "Errore: il percorso personalizzato deve iniziare con ~ (tilde). Riprova."
-        fi
-    done
+# --- Scelta del percorso JupyDo con autocomplete TAB ---
+while true; do
+    read -e -i "$REAL_HOME" -p "Enter the parent folder where to create JupyDo (TAB for autocomplete): " JUPYDO_PATH
 
-    JUPYDO_PATH="${JUPYDO_PATH%/}"  # remove trailing slash
-    JUPYDO_FULL_PATH="$JUPYDO_PATH/JupyDo"
-
-    echo "Creating directories under: $JUPYDO_FULL_PATH"
-    mkdir -p "$JUPYDO_FULL_PATH/jupyterhub_data"
-
-    if test -d "$JUPYDO_FULL_PATH/jupyterhub_data"; then
-        echo "Directory $JUPYDO_FULL_PATH/jupyterhub_data successfully created."
-    else
-        echo "Directory $JUPYDO_FULL_PATH/jupyterhub_data could not be created. Error. Exiting script."
-        exit 1
+    # Se l'utente preme invio senza scrivere nulla → default
+    if [ -z "$JUPYDO_PATH" ]; then
+        JUPYDO_PATH="$REAL_HOME"
+        break
     fi
+
+    # Espansione della tilde (~)
+    if [[ "$JUPYDO_PATH" == ~* ]]; then
+        JUPYDO_PATH=$(eval echo "$JUPYDO_PATH")
+        break
+    fi
+
+    # Se è percorso assoluto (/qualcosa) → accetta così com'è
+    if [[ "$JUPYDO_PATH" == /* ]]; then
+        break
+    fi
+
+    # Se è relativo (es. Documents, ./pippo) → aggancia a $REAL_HOME
+    JUPYDO_PATH="$REAL_HOME/$JUPYDO_PATH"
+    break
+done
+
+# Normalizzazione percorso (rimuove slash finale)
+JUPYDO_PATH="${JUPYDO_PATH%/}"
+JUPYDO_FULL_PATH="$JUPYDO_PATH/JupyDo"
+
+echo "Creating directories under: $JUPYDO_FULL_PATH"
+mkdir -p "$JUPYDO_FULL_PATH/jupyterhub_data"
+
+if test -d "$JUPYDO_FULL_PATH/jupyterhub_data"; then
+    echo "Directory $JUPYDO_FULL_PATH/jupyterhub_data successfully created."
+else
+    echo "Directory $JUPYDO_FULL_PATH/jupyterhub_data could not be created. Error. Exiting script."
+    exit 1
+fi
 
     echo "Enter the username for the initial admin user (default: limo):"
     read ADMIN_USER
@@ -104,9 +113,7 @@ if [ "$start_jupyterhub" == "y" ]; then
     mv compose.yaml.bak compose.yaml
     rm -f compose.yaml.bak
 
-    echo "JupyterHub server started. compose.yaml ripristinato."
+    echo "JupyterHub server started."
 else
     echo "You can start the JupyterHub server later using 'docker compose up -d --build'."
 fi
-
-
