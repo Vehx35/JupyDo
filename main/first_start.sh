@@ -2,6 +2,12 @@
 
 # first_start.sh - Initialization script
 
+# Ensure script runs as root
+if [ "$EUID" -ne 0 ]; then
+  echo "⚠️  This script must be run as root. Relaunching with sudo..."
+  exec sudo "$0" "$@"
+fi
+
 echo "Initialization script started."
 
 # Detect real user (even if run with sudo)
@@ -102,4 +108,5 @@ if [ "$start_jupyterhub" == "y" ]; then
 else
     echo "You can start the JupyterHub server later using 'docker compose up -d --build'."
 fi
+
 
