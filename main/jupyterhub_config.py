@@ -62,6 +62,9 @@ c.JupyterHub.hub_ip = '0.0.0.0'
 # Use the custom spawner
 c.JupyterHub.spawner_class = DemoFormSpawner
 
+# Increase the spawner start timeout (default is 60 seconds)
+c.Spawner.start_timeout = 120  # Set to 120 seconds or any desired value
+
 # DockerSpawner configuration
 c.DockerSpawner.network_name = 'jupyterhub_network'
 c.JupyterHub.hub_connect_ip = 'jupyterhub'  # Use the container name of the JupyterHub instance
@@ -71,11 +74,18 @@ notebook_dir = '/home/jovyan/work'
 c.DockerSpawner.notebook_dir = notebook_dir
 c.DockerSpawner.volumes = {
     'jupyterhub-user-{username}': notebook_dir,
-    '/home/jh_shared/{username}_shared': '/home/jovyan/work/shared'
+    '/srv/JupyDo/jh_shared/{username}_shared': '/home/jovyan/work/shared'
 }
+
+# Enable named servers (still in the tests)
+# c.JupyterHub.allow_named_servers = True  # Allow users to create multiple named servers
 
 # Debugging
 c.JupyterHub.log_level = 'DEBUG'
+
+# =============================================================================
+#                           Authenticator Configuration
+# =============================================================================
 
 # Authenticate users with Native Authenticator
 c.JupyterHub.authenticator_class = 'nativeauthenticator.NativeAuthenticator'
@@ -87,8 +97,17 @@ admin = 'limo'  # Replace with your admin username
 c.Authenticator.admin_users = {admin}
 c.Authenticator.allow_all = True
 
-# Increase the spawner start timeout (default is 60 seconds)
-c.Spawner.start_timeout = 120  # Set to 120 seconds or any desired value
+# Failed login attempts
+# Set the maximum number of failed login attempts before locking out the user
+#Default value is 0 (which means no limit on failed login attempts)
+c.NativeAuthenticator.allowed_failed_logins = 0
 
-# Enable named servers (still in the tests)
-# c.JupyterHub.allow_named_servers = True  # Allow users to create multiple named servers
+# Set timer between failed login attempts
+c.NativeAuthenticator.seconds_before_next_try = 0
+
+# Password complexity
+c.NativeAuthenticator.check_common_password = True
+c.NativeAuthenticator.minimum_password_length = 7
+
+
+
