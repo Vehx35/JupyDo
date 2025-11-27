@@ -87,4 +87,4 @@ This project is licensed under the **BSD 3-Clause License**. See the [LICENSE](L
 
 ---
 
-> ⚠️ **Disclaimer:** This project is currently in active development (WIP). Features and configurations are subject to change.
+> **Disclaimer:** This project is currently in active development (WIP). Features and configurations are subject to change.
