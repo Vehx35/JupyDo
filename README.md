@@ -15,33 +15,33 @@
 
 JupyDo allows users to launch pre-configured bioinformatics environments or specify compatible custom Docker images, running seamlessly on both **AMD64** and **ARM** architectures.
 
-## 🚀 Key Features
+## Key Features
 
-### 🐳 Containerized Isolation
+### Containerized Isolation
 * **Docker Integration:** Leverages standard Docker containers to create isolated workspaces for each user, preventing dependency conflicts between researchers.
 * **Multi-Architecture Support:** Designed to work simultaneously on **x86_64 (AMD64)** and **ARM64** (Apple Silicon M1/M2/M3) hardware, ensuring accessibility across different server types.
 
-### 🔄 Reproducibility & Flexibility
+### Reproducibility & Flexibility
 * **Curated Stacks:** Users can choose from a list of pre-configured, frozen environments (e.g., R/Seurat, Python/TensorFlow) guaranteed to work out-of-the-box.
 * **Custom Image Support:** Through the custom spawner interface, users can specify their own Docker images (must be Jupyter-compatible) to run specialized workflows.
 * **Multi-Environment Interface:** Supports **JupyterLab** directly in the browser.
 
-### 💾 Persistence & Sharing
+### Persistence & Sharing
 * **Persistent User Storage:** Every user gets a dedicated persistent volume (`/home/jovyan/work`) that survives container restarts.
 * **Shared Folders:** Automated setup of shared directories for collaboration between research groups.
 
-### 🛠️ Easy Administration
+### Easy Administration
 * **Automated Setup:** Includes a `first_start.sh` wizard that handles network creation, directory structure, and configuration generation.
 * **Custom Form Spawner:** A user-friendly HTML interface for selecting images and managing named servers.
 
-## 🏗️ Architecture
+## Architecture
 
 JupyDo is built on top of:
 * **JupyterHub**: The multi-user server core.
 * **DockerSpawner**: For spawning user instances.
 * **NativeAuthenticator**: For simple user management.
 
-## 📦 Installation
+## Installation
 
 ### Prerequisites
 * Linux Host (Ubuntu/Debian recommended)
@@ -65,7 +65,7 @@ JupyDo is built on top of:
 3.  **Access the Hub:**
     Open your browser and navigate to `http://localhost:8000` (or your server's IP).
 
-## 🖥️ Usage
+## Usage
 
 ### Starting a Server
 Upon login, users are presented with a configuration form:
@@ -76,11 +76,11 @@ Upon login, users are presented with a configuration form:
 * **Private Data:** Files in `/home/jovyan/work` are private and persistent.
 * **Shared Data:** Files in `/home/jovyan/work/shared` are accessible to other users (if configured).
 
-## 📜 License
+## License
 
 This project is licensed under the **BSD 3-Clause License**. See the [LICENSE](LICENSE) file for details.
 
-## 👥 Authors & Acknowledgments
+## Authors & Acknowledgments
 * **Francesco Maria Antonio Micocci** - *University of Turin*
 * **Luca Alessandri** - *University of Turin*
 * Developed as part of the **FAIRLab** project.
