@@ -26,6 +26,61 @@ if ! command -v docker compose &> /dev/null; then
     exit 1
 fi
 
+# --- SYSBOX INTEGRATION (Zero-Downtime Install) ---
+if ! command -v sysbox-runc &> /dev/null; then
+    echo "Sysbox not found. Preparing for zero-downtime installation..."
+    
+    DAEMON_JSON="/etc/docker/daemon.json"
+    
+    # Ensure jq is installed
+    if ! command -v jq &> /dev/null; then
+        apt-get update -qq && apt-get install -y jq
+    fi
+
+    # Prepare daemon.json to prevent the Sysbox installer from restarting Docker
+    if [ ! -f "$DAEMON_JSON" ]; then
+        echo '{"bip": "172.24.0.1/16", "default-address-pools": [{"base": "172.31.0.0/16", "size": 24}]}' > "$DAEMON_JSON"
+        echo "File $DAEMON_JSON created with Sysbox network parameters."
+    else
+        HAS_BIP=$(jq 'has("bip")' "$DAEMON_JSON")
+        HAS_POOLS=$(jq 'has("default-address-pools")' "$DAEMON_JSON")
+
+        if [ "$HAS_BIP" != "true" ] || [ "$HAS_POOLS" != "true" ]; then
+            echo "Adding 'bip' and 'default-address-pools' to $DAEMON_JSON to prevent automatic restart..."
+            cp "$DAEMON_JSON" "${DAEMON_JSON}.bak"
+            jq '. + {"bip": "172.24.0.1/16", "default-address-pools": [{"base": "172.31.0.0/16", "size": 24}]}' "$DAEMON_JSON" > "${DAEMON_JSON}.tmp" && mv "${DAEMON_JSON}.tmp" "$DAEMON_JSON"
+            
+            echo "------------------------------------------------------------------"
+            echo "NOTICE: Network parameters have been added to Docker."
+            echo "Sysbox will be installed without causing downtime (current containers will not be stopped)."
+            echo "However, the new network parameters will only be digested by Docker upon the next service or server restart."
+            echo "------------------------------------------------------------------"
+        fi
+    fi
+
+    # Proceed with installation
+    SYSBOX_VERSION="0.6.7"
+    DEB_FILE="/tmp/sysbox-ce_${SYSBOX_VERSION}-0.linux_amd64.deb"
+
+    echo "Downloading Sysbox CE v${SYSBOX_VERSION}..."
+    wget -qO "$DEB_FILE" "https://downloads.nestybox.com/sysbox/releases/v${SYSBOX_VERSION}/sysbox-ce_${SYSBOX_VERSION}-0.linux_amd64.deb" || { echo "Download failed!"; exit 1; }
+
+    echo "Installing Sysbox package..."
+    # The installer will find the parameters in the file and skip the daemon restart
+    apt-get install -y "$DEB_FILE"
+
+    rm -f "$DEB_FILE"
+
+    # Make Docker digest the new runtime without stopping containers
+    echo "Reloading Docker configuration (SIGHUP)..."
+    systemctl reload docker
+
+    echo "Sysbox successfully installed and ready to use!"
+else
+    echo "Sysbox is already installed. Skipping this step."
+fi
+# ---------------------------------------------------------
+
 # Creating Docker network (only once)
 if ! docker network inspect jupyterhub_network >/dev/null 2>&1; then
     echo "Creating Docker network..."
