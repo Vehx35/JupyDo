@@ -11,6 +11,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock # Lets dockerspawn use the Docker socket
       - ${JUPYDO_DATA_PATH:-/srv/JupyDo/jupyterhub_data}:/etc/jupyterhub # Persistent data jupyterhub
+      - ${JUPYDO_PATH:-/srv/JupyDo}/jh_shared:/srv/jh_shared # Shared directory for user notebooks
     networks:
       - jupyterhub_network
     restart: always # Restart the container if it stops

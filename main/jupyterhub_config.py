@@ -3,6 +3,16 @@ import os
 from dockerspawner import DockerSpawner
 import nativeauthenticator
 
+def create_shared_dir(spawner):
+    ## This hook is called when a user starts their server. 
+    ## It creates a shared directory for the user and sets the appropriate permissions.
+    username = spawner.user.name
+    hub_shared_dir = f"/srv/jh_shared/{username}_shared"
+    os.makedirs(hub_shared_dir, exist_ok=True)
+    os.chown(hub_shared_dir, 1000, 100)  # Set ownership to the jovyan user (uid=1000)
+    os.chmod(hub_shared_dir, 0o775) # Set permissions to rwxr-xr-x
+
+
 # Define the custom spawner class
 class DemoFormSpawner(DockerSpawner):
     def _options_form_default(self):
@@ -45,19 +55,9 @@ class DemoFormSpawner(DockerSpawner):
 
 c.JupyterHub.template_paths = [f"{os.path.dirname(nativeauthenticator.__file__)}/templates/"]
 
-c.DockerSpawner.extra_create_kwargs = {'user': 'root'}
-
 c.DockerSpawner.extra_host_config = {
     'runtime': 'sysbox-runc'
 }
-
-c.DockerSpawner.environment = {
-  'GRANT_SUDO': '1',
-  'UID': '0', # workaround https://github.com/jupyter/docker-stacks/pull/420
-}
-
-# Add post-start command to set permissions
-c.DockerSpawner.post_start_cmd = "sh -c 'sudo chmod 777 /home/jovyan/work/shared'"
 
 # Basic JupyterHub configuration
 c = get_config()  # noqa: F821
@@ -83,6 +83,17 @@ base_path = os.environ.get('JUPYDO_PATH', '/srv/JupyDo')
 c.DockerSpawner.volumes = {
     'jupyterhub-user-{username}': notebook_dir,
     f'{base_path}/jh_shared/{{username}}_shared': '/home/jovyan/work/shared'
+}
+
+c.DockerSpawner.extra_create_kwargs = {'user': 'root'}
+c.DockerSpawner.pre_spawn_hook = create_shared_dir
+
+c.DockerSpawner.environment = {
+    'GRANT_SUDO': '1',
+    'NOPASSWD': 'yes',    # Allow users to execute sudo commands without a password
+    'CHOWN_HOME': 'yes', # Assicura che jovyan possieda la sua home anche se avviato come root
+    'NB_UID': '1000',
+    'NB_GID': '100'
 }
 
 # Enable named servers (still in the tests)

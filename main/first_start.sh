@@ -46,24 +46,51 @@ if ! command -v sysbox-runc &> /dev/null; then
         apt-get update -qq && apt-get install -y jq
     fi
 
-    # Prepare daemon.json to prevent the Sysbox installer from restarting Docker
-    if [ ! -f "$DAEMON_JSON" ]; then
-        echo '{"bip": "172.24.0.1/16", "default-address-pools": [{"base": "172.31.0.0/16", "size": 24}]}' > "$DAEMON_JSON"
-        echo "File $DAEMON_JSON created with Sysbox network parameters."
+   # Prepare daemon.json with EXACT multi-line formatting expected by Sysbox installer
+    if [ ! -s "$DAEMON_JSON" ]; then
+        echo "Creating $DAEMON_JSON from scratch..."
+        cat <<EOF > "$DAEMON_JSON"
+{
+    "bip": "172.24.0.1/16",
+    "default-address-pools": [
+        {
+            "base": "172.31.0.0/16",
+            "size": 24
+        }
+    ]
+}
+EOF
+        echo "File $DAEMON_JSON created with precisely formatted Sysbox network parameters."
     else
-        HAS_BIP=$(jq 'has("bip")' "$DAEMON_JSON")
-        HAS_POOLS=$(jq 'has("default-address-pools")' "$DAEMON_JSON")
+        echo "Found existing $DAEMON_JSON. Checking contents..."
+        
+        # Se il file esiste ma ha una sintassi JSON rotta, jq fallisce. Lo forziamo a {}.
+        if ! jq -e . "$DAEMON_JSON" >/dev/null 2>&1; then
+            echo "WARNING: $DAEMON_JSON is not a valid JSON. Re-initializing it..."
+            echo "{}" > "$DAEMON_JSON"
+        fi
+
+        # Ora siamo sicuri che il file contiene un JSON leggibile
+        HAS_BIP=$(jq 'has("bip")' "$DAEMON_JSON" 2>/dev/null)
+        HAS_POOLS=$(jq 'has("default-address-pools")' "$DAEMON_JSON" 2>/dev/null)
 
         if [ "$HAS_BIP" != "true" ] || [ "$HAS_POOLS" != "true" ]; then
-            echo "Adding 'bip' and 'default-address-pools' to $DAEMON_JSON to prevent automatic restart..."
+            echo "Adding 'bip' and 'default-address-pools' to existing $DAEMON_JSON..."
             cp "$DAEMON_JSON" "${DAEMON_JSON}.bak"
-            jq '. + {"bip": "172.24.0.1/16", "default-address-pools": [{"base": "172.31.0.0/16", "size": 24}]}' "$DAEMON_JSON" > "${DAEMON_JSON}.tmp" && mv "${DAEMON_JSON}.tmp" "$DAEMON_JSON"
             
-            echo "------------------------------------------------------------------"
-            echo "NOTICE: Network parameters have been added to Docker."
-            echo "Sysbox will be installed without causing downtime (current containers will not be stopped)."
-            echo "However, the new network parameters will only be digested by Docker upon the next service or server restart."
-            echo "------------------------------------------------------------------"
+            jq --indent 4 '. + {
+                "bip": "172.24.0.1/16",
+                "default-address-pools": [
+                    {
+                        "base": "172.31.0.0/16",
+                        "size": 24
+                    }
+                ]
+            }' "$DAEMON_JSON" > "${DAEMON_JSON}.tmp" && mv "${DAEMON_JSON}.tmp" "$DAEMON_JSON"
+            
+            echo "Parameters successfully merged into $DAEMON_JSON."
+        else
+            echo "Network parameters already present in $DAEMON_JSON. Skipping modifications."
         fi
     fi
 
