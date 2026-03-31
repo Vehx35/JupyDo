@@ -46,6 +46,11 @@ class DemoFormSpawner(DockerSpawner):
 c.JupyterHub.template_paths = [f"{os.path.dirname(nativeauthenticator.__file__)}/templates/"]
 
 c.DockerSpawner.extra_create_kwargs = {'user': 'root'}
+
+c.DockerSpawner.extra_host_config = {
+    'runtime': 'sysbox-runc'
+}
+
 c.DockerSpawner.environment = {
   'GRANT_SUDO': '1',
   'UID': '0', # workaround https://github.com/jupyter/docker-stacks/pull/420
@@ -72,9 +77,12 @@ c.JupyterHub.hub_connect_ip = 'jupyterhub'  # Use the container name of the Jupy
 # Notebook directory and volumes
 notebook_dir = '/home/jovyan/work'
 c.DockerSpawner.notebook_dir = notebook_dir
+
+base_path = os.environ.get('JUPYDO_PATH', '/srv/JupyDo')
+
 c.DockerSpawner.volumes = {
     'jupyterhub-user-{username}': notebook_dir,
-    '/srv/JupyDo/jh_shared/{username}_shared': '/home/jovyan/work/shared'
+    f'{base_path}/jh_shared/{{username}}_shared': '/home/jovyan/work/shared'
 }
 
 # Enable named servers (still in the tests)
@@ -93,7 +101,7 @@ c.NativeAuthenticator.open_signup = False
 c.NativeAuthenticator.create_system_users = True
 
 # Allowed admins
-admin = 'limo'  # Replace with your admin username
+admin = os.environ.get('JUPYDO_ADMIN', 'limo')  # Replace with your admin username
 c.Authenticator.admin_users = {admin}
 c.Authenticator.allow_all = True
 
