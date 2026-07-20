@@ -53,14 +53,15 @@ class DemoFormSpawner(DockerSpawner):
             self.image = self.user_options['stack']
         return super().start()
 
+# Basic JupyterHub configuration
+c = get_config()  # noqa: F821
+
 c.JupyterHub.template_paths = [f"{os.path.dirname(nativeauthenticator.__file__)}/templates/"]
 
 c.DockerSpawner.extra_host_config = {
     'runtime': 'sysbox-runc'
 }
 
-# Basic JupyterHub configuration
-c = get_config()  # noqa: F821
 c.JupyterHub.bind_url = 'http://:8000'
 c.JupyterHub.hub_ip = '0.0.0.0'
 
