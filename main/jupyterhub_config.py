@@ -59,7 +59,6 @@ c = get_config()  # noqa: F821
 c.JupyterHub.template_paths = [f"{os.path.dirname(nativeauthenticator.__file__)}/templates/"]
 
 c.DockerSpawner.extra_host_config = {
-    'runtime': 'sysbox-runc'
 }
 
 c.JupyterHub.bind_url = 'http://:8000'
