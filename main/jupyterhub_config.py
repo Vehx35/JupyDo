@@ -14,44 +14,60 @@ def create_shared_dir(spawner):
 
 
 # Define the custom spawner class
-class DemoFormSpawner(DockerSpawner):
-    def _options_form_default(self):
-        return """
+class JupyDoSpawner(DockerSpawner):
+
+    JUPYDO_IMAGES = {
+        "jupyter/r-notebook": "R Studio & Notebook",
+        "jupyter/tensorflow-notebook": "TensorFlow",
+        "jupyter/datascience-notebook": "Data Science (Python, R, Julia)",
+        "jupyter/all-spark-notebook": "Apache Spark",
+    }
+
+    async def get_options_form(self):
+        if self.user_options.get("image"):
+            return ""
+            
+        options_html = '<option value="">-- Select a predefined stack --</option>\n'
+
+        for image, label in self.JUPYDO_IMAGES.items():
+            options_html += (
+                f'<option value="{image}">{label}</option>\n'
+            )
+
+        return f"""
         <div class="form-group">
-            <label for="stack" class="form-label">Select your desired stack:</label>
-            <select name="stack" class="form-select" size="1">
-                <option value="">-- Select a stack --</option>
-                <option value="jupyter/r-notebook">R</option>
-                <option value="jupyter/tensorflow-notebook">Tensorflow</option>
-                <option value="jupyter/datascience-notebook">Datascience</option>
-                <option value="jupyter/all-spark-notebook">Spark</option>
+            <label for="stack">Select your desired environment:</label>
+            <select name="stack" class="form-select">
+                {options_html}
             </select>
         </div>
-        <div class="form-group" style="margin-top:10px;">
-            <label for="custom_image" class="form-label">Or add image and name:</label>
-            <input type="text" name="custom_image" class="form-control" placeholder="e.g. myrepo/myimage:tag">
+
+        <div class="form-group" style="margin-top:15px;">
+            <label for="custom_image">
+                Or use a custom Docker image:
+            </label>
+            <input
+                type="text"
+                name="custom_image"
+                class="form-control"
+                placeholder="myrepo/myimage:tag"
+            >
         </div>
-        <br>
         """
 
     def options_from_form(self, formdata):
-        options = {}
-        selected_stack = formdata.get('stack', [''])[0]
+        selected_stack = formdata.get('stack', [''])[0].strip()
         custom_image = formdata.get('custom_image', [''])[0].strip()
-        if custom_image:
-            self.image = custom_image
-            options['stack'] = custom_image
-        elif selected_stack:
-            self.image = selected_stack
-            options['stack'] = selected_stack
-        else:
-            raise ValueError("You must select a stack or provide a custom image.")
-        return options
 
-    def start(self):
-        if 'stack' in self.user_options:
-            self.image = self.user_options['stack']
-        return super().start()
+        if custom_image:
+            image = custom_image
+        elif selected_stack:
+            image = selected_stack
+        else:
+            raise ValueError(
+                "You must select an environment or provide a custom image."
+            )
+        return {"image": image}
 
 # Basic JupyterHub configuration
 c = get_config()  # noqa: F821
@@ -65,7 +81,11 @@ c.JupyterHub.bind_url = 'http://:8000'
 c.JupyterHub.hub_ip = '0.0.0.0'
 
 # Use the custom spawner
-c.JupyterHub.spawner_class = DemoFormSpawner
+c.JupyterHub.spawner_class = JupyDoSpawner
+c.DockerSpawner.allowed_images = {
+    image: image
+    for image in JupyDoSpawner.JUPYDO_IMAGES
+}
 
 # Increase the spawner start timeout (default is 60 seconds)
 c.Spawner.start_timeout = 120  # Set to 120 seconds or any desired value
@@ -97,7 +117,7 @@ c.DockerSpawner.environment = {
 }
 
 # Enable named servers (still in the tests)
-# c.JupyterHub.allow_named_servers = True  # Allow users to create multiple named servers
+c.JupyterHub.allow_named_servers = True  # Allow users to create multiple named servers
 
 # Debugging
 c.JupyterHub.log_level = 'DEBUG'
