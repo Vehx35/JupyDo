@@ -26,47 +26,76 @@ class JupyDoSpawner(DockerSpawner):
     async def get_options_form(self):
         if self.user_options.get("image"):
             return ""
-            
-        options_html = '<option value="">-- Select a predefined stack --</option>\n'
+
+        options_html = ""
 
         for image, label in self.JUPYDO_IMAGES.items():
-            options_html += (
-                f'<option value="{image}">{label}</option>\n'
-            )
+            options_html += f'<option value="{image}">{label}</option>\n'
+
+        options_html += '<option value="__custom__">Custom Image</option>\n'
 
         return f"""
         <div class="form-group">
             <label for="stack">Select your desired environment:</label>
-            <select name="stack" class="form-select">
+
+            <select
+                name="stack"
+                id="stack"
+                class="form-select"
+                onchange="toggleCustomImage(this.value)"
+            >
                 {options_html}
             </select>
         </div>
 
-        <div class="form-group" style="margin-top:15px;">
-            <label for="custom_image">
-                Or use a custom Docker image:
-            </label>
+        <div
+            id="custom-image-group"
+            class="form-group"
+            style="margin-top:15px; display:none;"
+        >
+            <label for="custom_image">Docker image:</label>
+
             <input
                 type="text"
                 name="custom_image"
+                id="custom_image"
                 class="form-control"
                 placeholder="myrepo/myimage:tag"
             >
         </div>
+
+        <script>
+            function toggleCustomImage(value) {{
+                const group = document.getElementById("custom-image-group");
+                const input = document.getElementById("custom_image");
+
+                if (value === "__custom__") {{
+                    group.style.display = "block";
+                    input.required = true;
+                }} else {{
+                    group.style.display = "none";
+                    input.required = false;
+                    input.value = "";
+                }}
+            }}
+        </script>
         """
 
     def options_from_form(self, formdata):
-        selected_stack = formdata.get('stack', [''])[0].strip()
-        custom_image = formdata.get('custom_image', [''])[0].strip()
+        selected_stack = formdata.get("stack", [""])[0].strip()
+        custom_image = formdata.get("custom_image", [""])[0].strip()
 
-        if custom_image:
+        if selected_stack == "__custom__":
+            if not custom_image:
+                raise ValueError("Please provide a Docker image.")
             image = custom_image
+
         elif selected_stack:
             image = selected_stack
+
         else:
-            raise ValueError(
-                "You must select an environment or provide a custom image."
-            )
+            raise ValueError("Please select an environment.")
+
         return {"image": image}
 
 # Basic JupyterHub configuration
@@ -82,10 +111,7 @@ c.JupyterHub.hub_ip = '0.0.0.0'
 
 # Use the custom spawner
 c.JupyterHub.spawner_class = JupyDoSpawner
-c.DockerSpawner.allowed_images = {
-    image: image
-    for image in JupyDoSpawner.JUPYDO_IMAGES
-}
+c.DockerSpawner.allowed_images = "*"
 
 # Increase the spawner start timeout (default is 60 seconds)
 c.Spawner.start_timeout = 120  # Set to 120 seconds or any desired value
