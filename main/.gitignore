@@ -13,3 +13,5 @@ __pycache__/
 # The first prototype of the builder (replaced by the jupydo-builder repository),
 # with its vendored bundles: not part of JupyDo
 DockerBuilder/
+# Staged by build-hub.sh during the build (vendored files)
+hub-vendor/

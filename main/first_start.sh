@@ -389,11 +389,17 @@ EOF_TIMER
     # Disk health check (read-only): free space and inodes per disk, mergerfs branches
     bash ./jupydo-doctor.sh || echo "WARNING: jupydo-doctor found problems (see above)."
 
-    # The hub image is built by GitHub and downloaded ready-made; if it cannot be
-    # downloaded (e.g. offline), it is built here from this folder, as before
-    if docker compose pull jupyterhub && docker compose up -d --no-build; then
-        echo "JupyterHub server started (hub image from ghcr.io)."
-    elif docker compose up -d --build; then
+    # The hub image: downloaded ready-made from GitHub (ghcr.io); if it cannot be
+    # downloaded, built here from the vendored files of the builder (no internet needed)
+    if docker compose pull jupyterhub; then
+        echo "Hub image downloaded from ghcr.io."
+    elif JUPYDO_PATH="$JUPYDO_FULL_PATH" bash ./build-hub.sh; then
+        echo "Hub image built from the vendored files."
+    else
+        echo "ERROR: the hub image could not be downloaded nor built: JupyterHub was NOT updated."
+        exit 1
+    fi
+    if docker compose up -d; then
         echo "JupyterHub server started."
     else
         echo "ERROR: docker compose failed, JupyterHub was NOT updated (see the messages above)."
@@ -401,5 +407,5 @@ EOF_TIMER
     fi
 else
     echo "You can start the JupyterHub server later using 'docker compose pull && docker compose up -d'"
-    echo "(or 'docker compose up -d --build' to build the hub image here)."
+    echo "(or './build-hub.sh && docker compose up -d' to build the hub image here, from the vendored files)."
 fi

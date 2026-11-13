@@ -1,12 +1,10 @@
 services:
   jupyterhub:
-    # Built by GitHub (.github/workflows/hub-image.yml) and downloaded ready-made by
-    # first_start.sh; `docker compose up -d --build` builds it here instead (local changes).
-    # JUPYDO_HUB_TAG=<branch> (in .env or the shell) uses the image of a branch, to try it
+    # Built by GitHub (.github/workflows/hub-image.yml) from the vendored files and
+    # downloaded ready-made by first_start.sh; ./build-hub.sh builds it here instead, from
+    # the same vendored files, without internet. JUPYDO_HUB_TAG=<branch> (in .env or the
+    # shell) uses the image of a branch, to try it before merging.
     image: ghcr.io/vehx35/jupydo-hub:${JUPYDO_HUB_TAG:-latest}
-    build:
-      context: . # Indicates the current directory as the build context
-      dockerfile: Dockerfile.jupyterhub # Specifies the Dockerfile name
     container_name: jupyterhub #container name
     env_file:
       - .env

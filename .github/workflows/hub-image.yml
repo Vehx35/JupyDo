@@ -1,7 +1,8 @@
-# Builds the JupyDo hub image (main/Dockerfile.jupyterhub) for amd64 and arm64 and publishes
-# it on ghcr.io as <owner>/jupydo-hub:<commit> and :<branch>; :latest only for main, so a
-# branch can be tried (JUPYDO_HUB_TAG=<branch>, see compose.yaml) before it is merged.
-# first_start.sh downloads it ready-made; `docker compose up -d --build` builds it locally.
+# Builds the JupyDo hub image for amd64 and arm64 from the vendored files only (the builder's
+# vendor/hub, from the Zenodo record named in main/first_start.sh, with build-hub.sh: no
+# network during the build), and publishes it on ghcr.io as <owner>/jupydo-hub:<commit> and
+# :<branch>; :latest only for main, so a branch can be tried (JUPYDO_HUB_TAG=<branch>, see
+# compose.yaml) before it is merged. first_start.sh downloads it ready-made.
 name: hub-image
 
 on:
@@ -33,13 +34,21 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/setup-buildx-action@v3
-      - name: Build and push
+      - name: The vendored files of the hub, from Zenodo
         run: |
-          docker buildx build --platform linux/${{ matrix.arch }} -f main/Dockerfile.jupyterhub \
-            --label org.opencontainers.image.source=https://github.com/${{ github.repository }} \
-            --label org.opencontainers.image.revision=${{ github.sha }} \
-            -t $IMAGE:${{ github.sha }}-${{ matrix.arch }} --push main
+          RECORD="$(sed -n 's/^ *JUPYDO_VENDOR_RECORD="\([0-9]*\)".*/\1/p' main/first_start.sh)"
+          [ -n "$RECORD" ] || { echo "::error::JUPYDO_VENDOR_RECORD is not set in main/first_start.sh: publish the builder's vendor bundles on Zenodo first (jupydo-builder scripts/publish-zenodo.py)"; exit 1; }
+          BASE="https://zenodo.org/records/$RECORD/files"
+          mkdir -p /tmp/zenodo /tmp/vendor
+          curl -fsSL -o /tmp/zenodo/SHA256SUMS "$BASE/SHA256SUMS?download=1"
+          curl -fsSL -o /tmp/zenodo/vendor-hub.tar "$BASE/vendor-hub.tar?download=1"
+          (cd /tmp/zenodo && grep ' vendor-hub.tar$' SHA256SUMS | sha256sum -c -)
+          tar -xf /tmp/zenodo/vendor-hub.tar -C /tmp/vendor
+      - name: Build (no network) and push
+        run: |
+          JUPYDO_HUB_TAG=build ./main/build-hub.sh /tmp/vendor
+          docker tag ghcr.io/vehx35/jupydo-hub:build $IMAGE:${{ github.sha }}-${{ matrix.arch }}
+          docker push $IMAGE:${{ github.sha }}-${{ matrix.arch }}
 
   manifest:
     needs: build
