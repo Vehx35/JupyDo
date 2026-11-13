@@ -300,36 +300,13 @@ EOF_TIMER
         while ! [[ "$NETLOG_DAYS" =~ ^[0-9]+$ ]] || [ "$NETLOG_DAYS" -lt 1 ]; do
             read -p "Please type a number of days (e.g. 365): " NETLOG_DAYS
         done
-        if ! command -v conntrack &> /dev/null; then
-            if command -v apt-get &> /dev/null; then
-                apt-get install -y -qq conntrack
-            else
-                echo "WARNING: install conntrack (conntrack-tools) by hand: the network log needs it."
-            fi
-        fi
-        install -D -m 755 ./jupydo-netlog.py /usr/local/lib/jupydo/jupydo-netlog.py
-        cat > /etc/systemd/system/jupydo-netlog.service <<EOF_NETLOG
-[Unit]
-Description=JupyDo: network connection log (users' environments and jobs)
-After=docker.service
-Wants=docker.service
-
-[Service]
-ExecStart=/usr/bin/python3 /usr/local/lib/jupydo/jupydo-netlog.py --out $JUPYDO_FULL_PATH/logs/network --retention-days $NETLOG_DAYS
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF_NETLOG
-        systemctl daemon-reload
-        systemctl enable jupydo-netlog.service >/dev/null 2>&1
-        systemctl restart jupydo-netlog.service
-        echo "Network log enabled: $JUPYDO_FULL_PATH/logs/network/ (kept $NETLOG_DAYS days, root only)."
-    elif systemctl is-enabled jupydo-netlog.service &> /dev/null; then
-        systemctl disable --now jupydo-netlog.service
-        echo "Network log disabled (the files already written are kept)."
+        echo "COMPOSE_PROFILES=netlog" >> .env
+        echo "JUPYDO_NETLOG_DAYS=$NETLOG_DAYS" >> .env
+        mkdir -p "$JUPYDO_FULL_PATH/logs/network" && chmod 700 "$JUPYDO_FULL_PATH/logs/network"
+        echo "Network log enabled: $JUPYDO_FULL_PATH/logs/network/ (kept $NETLOG_DAYS days, root only;"
+        echo "it runs in the jupydo-netlog container, started with JupyterHub)."
     else
+        docker rm -f jupydo-netlog >/dev/null 2>&1 && echo "Network log stopped (the files already written are kept)."
         echo "Network log disabled."
     fi
 

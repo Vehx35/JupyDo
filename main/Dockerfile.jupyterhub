@@ -6,8 +6,8 @@
 ARG HUB_BASE=jupydo-hub-base:vendored
 FROM ${HUB_BASE}
 
-# JupyterHub and its proxy, the Python packages of the services (Genome Index), and the
-# sources of the Genome Index Service and of the JupyDo Assistant (at a fixed commit)
+# JupyterHub and its proxy, the Python packages of the services (Genome Index), conntrack
+# (network log), and the sources of the Genome Index Service and of the JupyDo Assistant
 COPY hub-vendor/ /tmp/hub-vendor/
 RUN python3 -m pip install --no-cache-dir --no-index --find-links /tmp/hub-vendor/wheels \
         -r /tmp/hub-vendor/requirements.txt \
@@ -15,6 +15,8 @@ RUN python3 -m pip install --no-cache-dir --no-index --find-links /tmp/hub-vendo
         --exclude='*/CHANGELOG.md' --exclude='*/LICENSE' --exclude='*/README.md' \
  && tar -xzf /tmp/hub-vendor/configurable-http-proxy.tar.gz -C /usr/local \
  && configurable-http-proxy --version \
+ && dpkg -i /tmp/hub-vendor/debs/*.deb \
+ && conntrack --version \
  && mkdir -p /opt/genome-index /opt/assistant \
  && tar -xzf /tmp/hub-vendor/genome-index.tar.gz -C /opt/genome-index --strip-components=1 \
  && tar -xzf /tmp/hub-vendor/assistant.tar.gz -C /opt/assistant --strip-components=1 \
@@ -32,8 +34,8 @@ COPY jobqueue_service.py jobqueue_admin.py jobqueue_admin.html jobqueue_magic.py
 
 # Image builder logic: makes every chosen image JupyDo-ready (vendorized stack)
 COPY jupydo_builder.py jupydo_ui.py jupydo_environments.py jupydo_environments.html jupydo_notifications.py jupydo_notifications.html jupydo_images_lib.py jupydo_images.py jupydo_images.html jupydo_transfer.py jupydo_transfer.html jupydo_bookings.py jupydo_bookings.html /opt/jupydo/
-# Cell log (only used if enabled in first_start.sh)
-COPY jupydo_celllog.py jupydo_celllog_server.py jupydo_celllog_config.py /opt/jupydo/
+# Cell log and network log (only used if enabled in first_start.sh)
+COPY jupydo_celllog.py jupydo_celllog_server.py jupydo_celllog_config.py jupydo-netlog.py /opt/jupydo/
 COPY templates/ /opt/jupydo/templates/
 COPY jobqueue_example/ /opt/jupydo/jobqueue_example/
 COPY apptainer_example/ /opt/jupydo/apptainer_example/

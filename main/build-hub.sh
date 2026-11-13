@@ -26,7 +26,7 @@ docker load -q -i "$VENDOR/$ARCH/base-image.tar.gz"
 
 rm -rf hub-vendor && mkdir -p hub-vendor
 trap 'rm -rf hub-vendor' EXIT
-cp -r "$VENDOR/$ARCH/wheels" "$VENDOR/$ARCH/requirements.txt" "$VENDOR/$ARCH/node.tar.xz" \
+cp -r "$VENDOR/$ARCH/wheels" "$VENDOR/$ARCH/debs" "$VENDOR/$ARCH/requirements.txt" "$VENDOR/$ARCH/node.tar.xz" \
       "$VENDOR/$ARCH/configurable-http-proxy.tar.gz" hub-vendor/
 cp "$VENDOR/common/genome-index.tar.gz" "$VENDOR/common/assistant.tar.gz" hub-vendor/
 cp "$VENDOR/$ARCH/manifest.txt" hub-vendor/manifest-$ARCH.txt

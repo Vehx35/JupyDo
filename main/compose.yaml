@@ -21,6 +21,24 @@ services:
       - jupyterhub_network
     restart: always # Restart the container if it stops
 
+  # Network connection log (only if enabled in first_start.sh: COMPOSE_PROFILES=netlog in
+  # .env). The hub image, with the host's network and NET_ADMIN to read the host's
+  # connection table (conntrack): nothing to install on the host. Root-only files.
+  netlog:
+    image: ghcr.io/vehx35/jupydo-hub:${JUPYDO_HUB_TAG:-latest}
+    container_name: jupydo-netlog
+    profiles: ["netlog"]
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock # which container has which address
+      - /etc/localtime:/etc/localtime:ro # times in the server's time zone
+      - ${JUPYDO_PATH:-/srv/JupyDo}/logs/network:/srv/jupydo-logs/network
+    command: ["python3", "/opt/jupydo/jupydo-netlog.py", "--out", "/srv/jupydo-logs/network",
+              "--retention-days", "${JUPYDO_NETLOG_DAYS:-365}"]
+    restart: always
+
 networks:
   jupyterhub_network:
     external: true # Indicates that the network is managed externally
