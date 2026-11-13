@@ -1,0 +1,37 @@
+{#
+  JupyDo: a service (JupyDo page or integrated app like the Genome Index Service)
+  shown under the hub menu. The service is loaded as it is, full size.
+#}
+{% extends "page.html" %}
+{% block main %}
+  <iframe id="jupydo-app" src="{{ app_url }}" title="{{ app_name }}"
+          style="display:block;width:100%;border:0;height:calc(100vh - 90px)"></iframe>
+{% endblock main %}
+{% block script %}
+  {{ super() }}
+  <script type="text/javascript">
+    // fill the window below the menu, whatever its height
+    (function () {
+      const frame = document.getElementById("jupydo-app");
+      const fit = () => { frame.style.height = (window.innerHeight - frame.getBoundingClientRect().top - 4) + "px"; };
+      window.addEventListener("resize", fit);
+      fit();
+    })();
+    // A click inside the service (the iframe) never reaches this page, so the hub
+    // menus would stay open: when the focus moves into the iframe, close them.
+    window.addEventListener("blur", function () {
+      setTimeout(function () {
+        if (document.activeElement !== document.getElementById("jupydo-app")) return;
+        document.querySelectorAll(".dropdown-menu.show").forEach(function (menu) {
+          const toggle = menu.parentElement.querySelector('[data-bs-toggle="dropdown"]');
+          if (toggle && window.bootstrap && window.bootstrap.Dropdown) {
+            window.bootstrap.Dropdown.getOrCreateInstance(toggle).hide();
+          } else {
+            menu.classList.remove("show");
+            if (toggle) { toggle.classList.remove("show"); toggle.setAttribute("aria-expanded", "false"); }
+          }
+        });
+      }, 0);
+    });
+  </script>
+{% endblock script %}

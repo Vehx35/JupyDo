@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JupyDo - Environments</title>
+<!-- Same look as the hub: its stylesheet and its light/dark theme -->
+<link rel="stylesheet" href="/hub/static/css/style.min.css">
+<style>
+  td, th { white-space: nowrap; vertical-align: middle; }
+  td.msg { white-space: normal; min-width: 260px; }
+  input.limit { width: 90px; }
+</style>
+</head>
+<body>
+<!--JUPYDO_NAVBAR-->
+<div class="container-fluid px-4 text-end small text-body-secondary" id="updated"></div>
+
+<div class="container-fluid px-4">
+  <div id="error" class="alert alert-danger d-none"></div>
+  <div id="overLimit" class="alert alert-danger d-none"></div>
+
+  <div id="gpuBox" class="d-none mb-4">
+    <h2 class="h5">GPU requests</h2>
+    <div class="table-responsive">
+      <table class="table table-sm table-striped">
+        <thead><tr><th>Date</th><th>User</th><th>Environment</th><th>When / why</th><th>Status</th><th>GPU</th><th></th></tr></thead>
+        <tbody id="gpuRequests"></tbody>
+      </table>
+    </div>
+    <p class="small text-body-secondary">The environment does not start until you approve and choose its GPU; the user
+      gets a message and starts it. No turns are enforced (users agree among themselves, e.g. with Bookings), and the
+      job queue keeps using every GPU. Take back: the environment keeps the GPU until it is reset or deleted.</p>
+  </div>
+
+  <div id="resBox" class="d-none mb-4">
+    <h2 class="h5">Requests for more CPU / RAM</h2>
+    <div class="table-responsive">
+      <table class="table table-sm table-striped">
+        <thead><tr><th>Date</th><th>User</th><th>Environment</th><th>Now</th><th>Asked</th><th>Why</th><th>Status</th><th></th></tr></thead>
+        <tbody id="resRequests"></tbody>
+      </table>
+    </div>
+    <p class="small text-body-secondary">Apply changes CPU and RAM of the running environment immediately, without
+      restarting it; the user gets a message either way.</p>
+  </div>
+
+  <div id="requestsBox" class="d-none mb-4">
+    <h2 class="h5">Save / download requests above <span id="reqLimit"></span> GB</h2>
+    <div class="table-responsive">
+      <table class="table table-sm table-striped">
+        <thead><tr><th>Date</th><th>User</th><th>Environment</th><th>Request</th><th>Size</th><th>Status</th><th></th></tr></thead>
+        <tbody id="requests"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+    <span class="small" id="hostInfo"></span>
+    <span class="vr mx-1"></span>
+    <span class="small">Default disk limit per user (GB):</span>
+    <input id="defaultLimit" class="form-control form-control-sm limit" type="number" min="1">
+    <button class="btn btn-outline-primary btn-sm" onclick="run(saveDefault)">Save</button>
+    <button class="btn btn-outline-secondary btn-sm" onclick="run(measureNow)">Measure disk now</button>
+    <button class="btn btn-outline-secondary btn-sm" onclick="run(load)">Refresh</button>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-sm table-striped">
+      <thead><tr>
+        <th>User</th><th>Environment</th><th>Account (UID)</th><th>Image</th><th>Status</th>
+        <th>CPU</th><th>RAM (GB)</th><th>Disk used (per user)</th><th>Disk limit (GB)</th><th></th>
+      </tr></thead>
+      <tbody id="envs"></tbody>
+    </table>
+  </div>
+  <h2 class="h5 mt-4">Environments per user</h2>
+  <p class="small text-body-secondary">How many environments each user may have (default <span id="slDefault"></span>;
+    0 = no limit).</p>
+  <div class="table-responsive">
+    <table class="table table-sm table-striped" style="max-width:640px">
+      <thead><tr><th>User</th><th>Environments</th><th>Maximum</th><th></th></tr></thead>
+      <tbody id="serverLimits"></tbody>
+    </table>
+  </div>
+
+  <p class="small text-body-secondary mb-5">
+    Stop: the environment stops, as when its user stops it (container and files kept).
+    Delete: the environment and its container are removed, as when its user deletes it; the user's files in
+    /sharedFolder are kept, software installed with sudo is lost.
+    Empty fields stay unchanged. CPU and RAM apply immediately, also to running environments, and stay after restarts.
+    Disk = /sharedFolder of the user (plus the old work volume, if not yet migrated), measured every hour;
+    users over their limit get an urgent notification until they are back under it.
+    Reset (stopped environments only): fresh container at the next start, files in /sharedFolder are kept.
+  </p>
+</div>
+
+<script>
+const base = location.pathname.replace(/\/?$/, "/");
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const num = x => (x === null || x === undefined) ? "" : Math.round(x * 10) / 10;
+const when = t => t ? new Date(t * 1000).toLocaleString() : "never";
+function showError(msg) {
+  const box = document.getElementById("error");
+  box.textContent = msg; box.classList.toggle("d-none", !msg);
+}
+async function api(method, path, body) {
+  const r = await fetch(base + path, {method, credentials: "same-origin",
+    headers: body ? {"Content-Type": "application/json"} : {}, body: body ? JSON.stringify(body) : undefined});
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || r.statusText);
+  return data;
+}
+async function run(fn) { try { showError(""); await fn(); } catch (e) { showError(e.message); } }
+function stamp() { document.getElementById("updated").textContent = "updated " + new Date().toLocaleTimeString(); }
+
+async function load() {
+  const data = await api("GET", "api/environments");
+  document.getElementById("hostInfo").textContent = `Host: ${num(data.host.cpus)} CPUs, ${num(data.host.mem_gb)} GB RAM`;
+  document.getElementById("defaultLimit").value = data.default_disk_limit_gb;
+  const box = document.getElementById("overLimit");
+  box.classList.toggle("d-none", !data.over_disk_limit.length);
+  box.innerHTML = data.over_disk_limit.length ? "<b>Over the disk limit:</b> " + data.over_disk_limit.map(esc).join(", ") : "";
+  document.getElementById("envs").innerHTML = data.environments.map(e => {
+    const d = e.disk;
+    return `<tr class="${d.over ? "table-danger" : ""}">
+      <td>${esc(e.user)}</td><td>${esc(e.server) || "<i>default</i>"}</td>
+      <td>${esc(e.linux_user)} (${esc(e.uid)})</td><td><code>${esc(e.image)}</code></td>
+      <td><span class="badge ${e.status === "running" ? "text-bg-success" : "text-bg-secondary"}">${esc(e.status)}</span></td>
+      <td><input class="form-control form-control-sm limit" id="cpu-${esc(e.name)}" placeholder="${e.cpus === null ? "unlimited" : num(e.cpus)}"></td>
+      <td><input class="form-control form-control-sm limit" id="mem-${esc(e.name)}" placeholder="${e.mem_gb === null ? "unlimited" : num(e.mem_gb)}"></td>
+      <td title="work ${num(d.work_gb)} GB + shared ${num(d.shared_gb)} GB, measured ${when(d.measured_at)}">
+        <b>${num(d.used_gb)} GB</b> ${d.over ? '<span class="badge text-bg-danger">over</span>' : ""}</td>
+      <td><input class="form-control form-control-sm limit" id="disk-${esc(e.name)}" type="number" min="1"
+                 placeholder="${num(d.limit_gb)}${d.custom_limit ? "" : " (def.)"}"></td>
+      <td class="text-nowrap">
+        <button class="btn btn-outline-primary btn-sm" onclick="run(() => apply('${esc(e.name)}','${esc(e.user)}'))">Apply</button>
+        ${d.custom_limit ? `<button class="btn btn-outline-secondary btn-sm" onclick="run(() => diskDefault('${esc(e.user)}'))">Default disk</button>` : ""}
+        ${e.status === "running" ? `<button class="btn btn-outline-warning btn-sm" onclick="run(() => stopEnv('${esc(e.name)}','${esc(e.user)}'))">Stop</button>` : ""}
+        ${e.status !== "running" ? `<button class="btn btn-outline-danger btn-sm" onclick="run(() => resetEnv('${esc(e.name)}','${esc(e.user)}'))">Reset</button>` : ""}
+        <button class="btn btn-danger btn-sm" onclick="run(() => deleteEnv('${esc(e.name)}','${esc(e.user)}','${esc(e.server)}'))">Delete</button>
+      </td></tr>`;
+  }).join("") || `<tr><td colspan="10" class="text-body-secondary">No environments.</td></tr>`;
+  stamp();
+}
+async function loadRequests() {
+  const data = await api("GET", "api/requests");
+  document.getElementById("reqLimit").textContent = data.limit_gb;
+  document.getElementById("requestsBox").classList.toggle("d-none", !data.requests.length);
+  document.getElementById("requests").innerHTML = data.requests.map(r => `<tr class="${r.status === "pending" ? "table-warning" : ""}">
+    <td>${when(r.created)}</td><td>${esc(r.user)}</td><td>${esc(r.server || "default")}</td>
+    <td>${r.kind === "commit" ? "Save as image '" + esc(r.name) + "'" : "Download"}</td>
+    <td>${r.size_gb} GB</td><td>${esc(r.status)}${r.decided_by ? " by " + esc(r.decided_by) : ""}</td>
+    <td>${r.status === "pending" ? `
+      <button class="btn btn-success btn-sm" onclick="run(() => decide('${r.id}', true))">Approve</button>
+      <button class="btn btn-outline-danger btn-sm" onclick="run(() => decide('${r.id}', false))">Reject</button>` : ""}</td>
+  </tr>`).join("");
+}
+async function decide(id, approve) {
+  if (!confirm(approve ? "Approve? The operation starts now." : "Reject this request?")) return;
+  await api("POST", "api/requests/" + id, {approve});
+  await loadRequests();
+}
+async function apply(name, user) {
+  const cpus = document.getElementById("cpu-" + name).value.trim();
+  const mem = document.getElementById("mem-" + name).value.trim();
+  const disk = document.getElementById("disk-" + name).value.trim();
+  if (cpus || mem) await api("POST", "api/environments/" + name + "/limits", {cpus: cpus || null, mem_gb: mem || null});
+  if (disk) await api("POST", "api/disk", {user, limit_gb: disk});
+  await load();
+}
+async function diskDefault(user) { await api("POST", "api/disk", {user, limit_gb: null}); await load(); }
+async function saveDefault() { await api("POST", "api/disk", {default_limit_gb: document.getElementById("defaultLimit").value}); await load(); }
+async function measureNow() { await api("POST", "api/disk/measure"); setTimeout(() => run(load), 5000); }
+async function resetEnv(name, user) {
+  if (!confirm(`Reset ${name} of ${user}?\n\nIts container is removed: at the next start ${user} chooses the image ` +
+               `again and gets a fresh container. Files in /sharedFolder are kept; software installed with sudo is lost.`)) return;
+  await api("POST", "api/environments/" + name + "/reset");
+  await load();
+}
+async function stopEnv(name, user) {
+  if (!confirm(`Stop ${name} of ${user}?\n\nIt stops as if ${user} stopped it: container and files are kept.`)) return;
+  await api("POST", "api/environments/" + name + "/stop");
+  setTimeout(() => run(load), 3000);
+}
+async function deleteEnv(name, user, server) {
+  if (!confirm(`DELETE environment '${server}' of ${user}?\n\nThe environment and its container are removed ` +
+               `(software installed with sudo is lost). Files in /sharedFolder are kept.`)) return;
+  await api("POST", "api/environments/" + name + "/delete");
+  setTimeout(() => run(load), 3000);
+}
+const fmtRes = (c, m) => (c === null || c === undefined) ? "-" : `${num(c)} CPU, ${num(m)} GB`;
+async function loadResourceRequests() {
+  const data = await api("GET", "api/resource-requests");
+  document.getElementById("resBox").classList.toggle("d-none", !data.requests.length);
+  document.getElementById("resRequests").innerHTML = data.requests.map(r => `<tr class="${r.status === "pending" ? "table-warning" : ""}">
+    <td>${when(r.created)}</td><td>${esc(r.user)}</td><td>${esc(r.server)}</td>
+    <td>${r.current ? fmtRes(r.current.cpus, r.current.mem_gb) : (r.status === "pending" ? "<i>not found</i>" : "")}</td>
+    <td><b>${fmtRes(r.cpus, r.mem_gb)}</b></td><td class="msg">${esc(r.note)}</td>
+    <td>${esc(r.status)}${r.decided_by ? " by " + esc(r.decided_by) : ""}</td>
+    <td>${r.status === "pending" ? `
+      <button class="btn btn-success btn-sm" onclick="run(() => decideRes('${r.id}', true))">Apply</button>
+      <button class="btn btn-outline-danger btn-sm" onclick="run(() => decideRes('${r.id}', false))">Reject</button>` : ""}</td>
+  </tr>`).join("");
+}
+async function decideRes(id, approve) {
+  if (!confirm(approve ? "Apply the new CPU/RAM now (no restart)?" : "Reject this request?")) return;
+  await api("POST", "api/resource-requests/" + id, {approve});
+  await loadResourceRequests();
+  await load();
+}
+async function loadGpuRequests() {
+  const data = await api("GET", "api/gpu-requests");
+  document.getElementById("gpuBox").classList.toggle("d-none", !data.requests.length);
+  const options = data.gpus.length
+    ? data.gpus.map(g => `<option value="${esc(g.index)}">GPU ${esc(g.index)}: ${esc(g.model)}</option>`).join("")
+    : `<option value="">no GPU found on this server</option>`;
+  document.getElementById("gpuRequests").innerHTML = data.requests.map(r => `<tr id="gpurow-${r.id}" class="${r.status === "pending" ? "table-warning" : ""}">
+    <td>${when(r.created)}</td><td>${esc(r.user)}</td><td>${esc(r.server)}</td><td class="msg">${esc(r.note)}</td>
+    <td>${esc(r.status)}${r.decided_by ? " by " + esc(r.decided_by) : ""}</td>
+    <td>${r.status === "pending" ? `<select id="gpu-${r.id}" class="form-select form-select-sm">${options}</select>`
+        : (r.gpu !== null && r.gpu !== undefined ? "GPU " + esc(r.gpu) : "")}</td>
+    <td>${r.status === "pending" ? `
+      <button class="btn btn-success btn-sm" data-act="approve" onclick="run(() => decideGpu('${r.id}', 'approve'))">Approve</button>
+      <button class="btn btn-outline-danger btn-sm" data-act="reject" onclick="run(() => decideGpu('${r.id}', 'reject'))">Reject</button>`
+      : r.status === "approved" ? `
+      <button class="btn btn-outline-secondary btn-sm" data-act="revoke" onclick="run(() => decideGpu('${r.id}', 'revoke'))">Take back</button>` : ""}</td>
+  </tr>`).join("");
+}
+async function decideGpu(id, action) {
+  const body = {action};
+  if (action === "approve") body.gpu = document.getElementById("gpu-" + id).value;
+  const ask = {approve: `Give GPU ${body.gpu} to this environment?`, reject: "Reject this GPU request?",
+               revoke: "Take the GPU back? The environment keeps it until it is reset or deleted."}[action];
+  if (!confirm(ask)) return;
+  const row = document.getElementById("gpurow-" + id);
+  row?.querySelectorAll("button").forEach(b => { b.disabled = true; });
+  const btn = row?.querySelector(`[data-act="${action}"]`);
+  if (btn) btn.textContent = {approve: "Approving…", reject: "Rejecting…", revoke: "Taking back…"}[action];
+  let r;
+  try { r = await api("POST", "api/gpu-requests/" + id, body); }
+  catch (e) { await loadGpuRequests(); throw e; }
+  await loadGpuRequests();
+  const done = {approve: `Approved: GPU ${body.gpu} given to ${r.user}'s environment '${r.server}', which is starting now ` +
+                         `(a few minutes if its image must be built). ${r.user} gets a notification.`,
+                reject: `Rejected: ${r.user} gets a notification.`,
+                revoke: `GPU taken back from ${r.user}'s environment '${r.server}' (it keeps it until reset or deleted).`}[action];
+  showGpuDone(done);
+}
+function showGpuDone(text) {
+  let box = document.getElementById("gpuDone");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "gpuDone";
+    box.className = "alert alert-success py-2 small";
+    document.getElementById("gpuBox").prepend(box);
+  }
+  box.textContent = text;
+  box.classList.remove("d-none");
+  clearTimeout(box._t);
+  box._t = setTimeout(() => box.classList.add("d-none"), 15000);
+}
+async function loadServerLimits() {
+  const data = await api("GET", "api/server-limits");
+  document.getElementById("slDefault").textContent = data.default;
+  document.getElementById("serverLimits").innerHTML = data.users.map(u => `<tr>
+    <td>${esc(u.user)}</td><td>${u.environments}</td>
+    <td><input class="form-control form-control-sm limit" type="number" min="0" max="100" id="sl-${esc(u.user)}"
+               value="${u.limit}"> ${u.custom ? "" : '<span class="small text-body-secondary">(default)</span>'}</td>
+    <td><button class="btn btn-outline-primary btn-sm" onclick="run(() => saveServerLimit('${esc(u.user)}'))">Save</button></td>
+  </tr>`).join("") || `<tr><td colspan="4" class="text-body-secondary">No users yet.</td></tr>`;
+}
+async function saveServerLimit(user) {
+  await api("POST", "api/server-limits/" + encodeURIComponent(user), {limit: document.getElementById("sl-" + user).value});
+  await loadServerLimits();
+}
+run(load);
+run(loadRequests);
+run(loadResourceRequests);
+run(loadGpuRequests);
+run(loadServerLimits);
+setInterval(() => { run(load); run(loadRequests); run(loadResourceRequests); run(loadGpuRequests); }, 60000);
+</script>
+</body>
+</html>

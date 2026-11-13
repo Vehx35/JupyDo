@@ -1,0 +1,186 @@
+{% extends "page.html" %}
+{% if announcement_home is string %}
+  {% set announcement = announcement_home %}
+{% endif %}
+{#
+  JupyDo home: no default server, every environment is a named server.
+  Users create, start, stop and delete their environments from this list.
+#}
+{% block main %}
+  {% if jupydo_terms_pending %}
+    {# new terms (or never accepted): the terms page first; environments cannot start before #}
+    <script>location.replace("{{ base_url }}jupydo/terms");</script>
+  {% endif %}
+  <div class="container">
+    {% for msg in (jupydo_notifications or []) %}
+      <div class="alert alert-{{ {'danger': 'danger', 'warning': 'warning'}.get(msg.level, 'info') }} d-flex align-items-start"
+           role="alert">
+        <div class="flex-grow-1">
+          {% if msg.level == 'danger' %}<strong>&#9888; </strong>{% endif %}{{ msg.text }}
+          <div class="small text-body-secondary mt-1">from {{ msg['from'] }}</div>
+        </div>
+        {% if msg.link %}
+          <a class="btn btn-sm btn-primary ms-3" href="{{ msg.link }}">Open</a>
+        {% endif %}
+        {% if msg.id[:5] != 'disk-' %}
+          <a class="btn btn-sm btn-outline-secondary ms-3"
+             href="{{ base_url }}jupydo/notifications/{{ msg.id }}/read">Dismiss</a>
+        {% endif %}
+      </div>
+    {% endfor %}
+    <h1>{{ jupydo_server_name or 'JupyDo' }} &middot; my environments</h1>
+    {% if jupydo_account %}
+      <p class="{% if jupydo_account.days_left <= 7 %}text-danger fw-bold{% else %}text-body-secondary{% endif %}">
+        Account valid until {{ jupydo_account.until }}
+        ({% if jupydo_account.days_left == 0 %}last day{% elif jupydo_account.days_left == 1 %}1 day left{% else %}{{ jupydo_account.days_left }} days left{% endif %})
+      </p>
+    {% endif %}
+    <p>
+      Each environment runs one image and keeps its own installed software.
+      Your files in <code>work</code> are shared by all your environments.
+      {% if named_server_limit_per_user > 0 %}You can have up to {{ named_server_limit_per_user }} environments.{% endif %}
+    </p>
+    {% set named_spawners = user.all_spawners(include_default=False)|list %}
+    <table class="server-table table table-striped">
+      <thead>
+        <tr>
+          <th>Environment</th>
+          <th>URL</th>
+          <th>Last activity</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="home-server-row add-server-row">
+          <td colspan="4">
+            <div class="input-group">
+              <input class="new-server-name form-control"
+                     aria-label="environment name"
+                     placeholder="name-your-environment">
+              <button role="button"
+                      type="button"
+                      disabled
+                      class="new-server-btn btn btn-xs btn-primary">Add New Environment</button>
+            </div>
+            <div class="new-server-hint form-text text-danger" style="display:none"></div>
+          </td>
+        </tr>
+        {% for spawner in named_spawners %}
+          <tr class="home-server-row" data-server-name="{{ spawner.name }}">
+            <td>{{ spawner.name }}</td>
+            <td>
+              <a class="server-link {% if not spawner.ready %}hidden{% endif %}"
+                 href="{{ user.server_url(spawner.name) }}">{{ user.server_url(spawner.name) }}</a>
+            </td>
+            <td class='time-col'>
+              {% if spawner.last_activity %}
+                {{ spawner.last_activity.isoformat() + 'Z' }}
+              {% else %}
+                Never
+              {% endif %}
+            </td>
+            <td>
+              <a role="button"
+                 class="stop-server btn btn-xs btn-danger{% if not spawner.active %} hidden{% endif %}"
+                 id="stop-{{ spawner.name }}">stop</a>
+              <a role="button"
+                 class="start-server btn btn-xs btn-primary {% if spawner.active %}hidden{% endif %}"
+                 id="start-{{ spawner.name }}"
+                 href="{{ base_url }}spawn/{{ user.name }}/{{ spawner.name }}">start</a>
+              <button role="button"
+                      class="delete-server btn btn-xs btn-danger{% if spawner.active %} hidden{% endif %}"
+                      id="delete-{{ spawner.name }}">delete</button>
+              <button type="button" class="btn btn-xs btn-outline-secondary jupydo-resources-btn"
+                      data-server="{{ spawner.name }}" data-bs-toggle="modal"
+                      data-bs-target="#jupydo-resources">more resources</button>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# "more resources": ask the admins for more CPU/RAM for one environment #}
+  {% set res = jupydo_resources or {} %}
+  <div class="modal fade" id="jupydo-resources" tabindex="-1" aria-labelledby="jupydo-resources-title">
+    <div class="modal-dialog">
+      <form class="modal-content" method="post" id="jupydo-resources-form">
+        <input type="hidden" name="_xsrf" value="{{ xsrf }}">
+        <div class="modal-header">
+          <h5 class="modal-title" id="jupydo-resources-title">More resources</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small">The request goes to the admins. The environment keeps running; once they
+            approve it, the new limits are applied without restarting.</p>
+          <div class="row g-2">
+            <div class="col">
+              <label class="form-label" for="jupydo-res-cpus">CPU</label>
+              <select class="form-select" name="cpus" id="jupydo-res-cpus">
+                {% for v in res.get('cpus', []) %}<option value="{{ v }}">{{ v }}{% if v == res.get('default_cpus') %} (default){% endif %}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col">
+              <label class="form-label" for="jupydo-res-mem">RAM (GB)</label>
+              <select class="form-select" name="mem_gb" id="jupydo-res-mem">
+                {% for v in res.get('mem_gb', []) %}<option value="{{ v }}">{{ v }}{% if v == res.get('default_mem_gb') %} (default){% endif %}</option>{% endfor %}
+              </select>
+            </div>
+          </div>
+          <label class="form-label mt-2" for="jupydo-res-note">Why (optional)</label>
+          <input class="form-control" name="note" id="jupydo-res-note" maxlength="500"
+                 placeholder="e.g. STAR index of the human genome">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Send request</button>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock main %}
+{% block script %}
+  {{ super() }}
+  <script type="text/javascript">
+    require(["home"]);
+    // "more resources": the form posts to /hub/jupydo/resources/<environment>
+    document.querySelectorAll(".jupydo-resources-btn").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var server = b.getAttribute("data-server");
+        document.getElementById("jupydo-resources-form").action =
+          "{{ base_url }}jupydo/resources/" + encodeURIComponent(server);
+        document.getElementById("jupydo-resources-title").textContent = "More resources for '" + server + "'";
+      });
+    });
+    // Every environment needs a name (an empty one would start the unnamed default
+    // server, which JupyDo does not use). Letters, digits, - _ . ; must start with a
+    // letter or digit. The hub refuses unnamed environments too.
+    (function () {
+      var input = document.querySelector(".new-server-name");
+      var button = document.querySelector(".new-server-btn");
+      var hint = document.querySelector(".new-server-hint");
+      if (!input || !button) return;
+      var valid = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
+      function update() {
+        var name = input.value.trim();
+        var ok = valid.test(name);
+        button.disabled = !ok;
+        if (name && !ok) {
+          hint.textContent = "Use letters, digits, '-', '_' or '.', starting with a letter or digit.";
+          hint.style.display = "";
+        } else {
+          hint.style.display = "none";
+        }
+      }
+      input.addEventListener("input", update);
+      // Enter or click with an invalid name must not start anything
+      input.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" && button.disabled) { e.preventDefault(); e.stopImmediatePropagation(); }
+      }, true);
+      button.addEventListener("click", function (e) {
+        if (button.disabled) { e.preventDefault(); e.stopImmediatePropagation(); }
+      }, true);
+      update();
+    })();
+  </script>
+{% endblock script %}

@@ -1,0 +1,48 @@
+{#
+  JupyDo: the hub page layout, used by every hub page.
+  - NativeAuthenticator menu items (Change Password, Authorize Users), when it is the login method
+  - every entry of the Services menu opens the service inside a hub page
+    (/hub/jupydo/apps/<name>), so the hub menu always stays on top and the
+    service itself needs no change (see jupydo_app.html)
+#}
+{% extends "templates/page.html" %}
+
+{% block scripts %}
+  <script type="text/javascript">
+    // JupyDo: dark theme unless the user already chose one (before the hub's darkmode.js
+    // reads it). JupyterLab, the JupyDo pages and the integrated apps follow the same
+    // choice: they all read it from here (same site, same browser storage).
+    try {
+      if (!localStorage.getItem("jupyterhub-bs-theme")) {
+        localStorage.setItem("jupyterhub-bs-theme", "dark");
+      }
+    } catch (e) {}
+  </script>
+  {{ super() }}
+  <script type="text/javascript">
+    // when the theme is toggled in the hub, tell the integrated apps too (they keep
+    // their own key, e.g. the Genome Index Service)
+    new MutationObserver(function () {
+      var theme = document.documentElement.getAttribute("data-bs-theme");
+      if (theme === "light" || theme === "dark") {
+        try { localStorage.setItem("gis-mode", theme); } catch (e) {}
+      }
+    }).observe(document.documentElement, {attributes: true, attributeFilter: ["data-bs-theme"]});
+  </script>
+{% endblock scripts %}
+
+{% block nav_bar_left_items %}
+  {{ super() }}
+  {% if jupydo_native_auth %}
+    <li class="nav-item"><a class="nav-link" href="{{ base_url }}change-password">Change Password</a></li>
+    {% if user.admin %}
+      <li class="nav-item"><a class="nav-link" href="{{ base_url }}authorize">Authorize Users</a></li>
+    {% endif %}
+  {% endif %}
+{% endblock %}
+
+{% block service %}
+  <li>
+    <a class="dropdown-item" href="{{ base_url }}jupydo/apps/{{ service.name }}">{{ service.name }}</a>
+  </li>
+{% endblock service %}

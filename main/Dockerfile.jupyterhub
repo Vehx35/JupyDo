@@ -1,10 +1,8 @@
 FROM python:3.9
 RUN python3 -m pip install \
-    'jupyterhub' \
-    'notebook' \
-    'jupyterhub-nativeauthenticator' \
-    'dockerspawner' \
-    --upgrade 'jupyterlab'
+    'jupyterhub==5.5.1' \
+    'jupyterhub-nativeauthenticator==1.3.0' \
+    'dockerspawner==14.0.0'
 
 RUN apt-get update && apt-get install -y \
     npm && \
@@ -19,6 +17,34 @@ RUN mkdir -p /etc/jupyterhub
 
 # Copy the JupyterHub configuration file to the created directory
 COPY jupyterhub_config.py /etc/jupyterhub/jupyterhub_config.py
+
+# Batch job queue service (outside /etc/jupyterhub, which is a mounted volume)
+COPY jobqueue_service.py jobqueue_admin.py jobqueue_admin.html jobqueue_magic.py jobqueue_cli.py ipython_kernel_config.py Rprofile.site /opt/jobqueue/
+
+# Image builder logic: makes every chosen image JupyDo-ready (vendorized stack)
+COPY jupydo_builder.py jupydo_ui.py jupydo_environments.py jupydo_environments.html jupydo_notifications.py jupydo_notifications.html jupydo_images_lib.py jupydo_images.py jupydo_images.html jupydo_transfer.py jupydo_transfer.html jupydo_bookings.py jupydo_bookings.html /opt/jupydo/
+COPY templates/ /opt/jupydo/templates/
+COPY jobqueue_example/ /opt/jupydo/jobqueue_example/
+COPY apptainer_example/ /opt/jupydo/apptainer_example/
+COPY jupydo_selftest/ /opt/jupydo/jupydo_selftest/
+COPY labextension/jupydo-notifications/ /opt/jupydo/labextension/jupydo-notifications/
+
+# Genome Index Service, run as a hub service. ADD of a URL is checked again at
+# every build, so a new push to its main branch is picked up without --no-cache.
+RUN python3 -m pip install 'flask==3.1.0' 'waitress==3.0.2' 'requests==2.32.3' 'oauthenticator==17.3.0'
+ADD https://github.com/ReproducibleBioinformatics/Index_builderGUI/archive/refs/heads/main.tar.gz /tmp/genome-index.tar.gz
+RUN mkdir -p /opt/genome-index \
+ && tar -xzf /tmp/genome-index.tar.gz -C /opt/genome-index --strip-components=1 \
+ && rm /tmp/genome-index.tar.gz
+
+# JupyDo Assistant, run as a hub service: code and image catalog, from its main branch
+# (the catalog there is rebuilt every 3 months; ADD of a URL picks up new pushes as
+# above). Its model is downloaded by first_start.sh. tornado and docker are already
+# here (jupyterhub, dockerspawner).
+ADD https://github.com/ReproducibleBioinformatics/JupyDo-Assistant/archive/refs/heads/main.tar.gz /tmp/assistant.tar.gz
+RUN mkdir -p /opt/assistant \
+ && tar -xzf /tmp/assistant.tar.gz -C /opt/assistant --strip-components=1 \
+ && rm /tmp/assistant.tar.gz
 
 # Set the working directory
 WORKDIR /etc/jupyterhub

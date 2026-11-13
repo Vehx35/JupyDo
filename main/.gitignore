@@ -1,0 +1,15 @@
+# Made by first_start.sh on each installation: secrets and paths of that machine
+.env
+# Data of a running installation (users' files, hub state, logs, builder copy)
+Jupydo/
+# The builder and its vendored bundles: downloaded by first_start.sh from Zenodo
+# (they come from the jupydo-builder repository)
+builder/
+# Local leftovers, not part of JupyDo
+Archive.tar.gz
+file_list.txt
+sizes.txt
+__pycache__/
+# The first prototype of the builder (replaced by the jupydo-builder repository),
+# with its vendored bundles: not part of JupyDo
+DockerBuilder/

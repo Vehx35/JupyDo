@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JupyDo - Notifications</title>
+<!-- Same look as the hub: its stylesheet and its light/dark theme -->
+<link rel="stylesheet" href="/hub/static/css/style.min.css">
+<style>
+  td, th { white-space: nowrap; vertical-align: middle; }
+  td.msg { white-space: normal; min-width: 260px; }
+  input.limit { width: 90px; }
+</style>
+</head>
+<body>
+<!--JUPYDO_NAVBAR-->
+<div class="container-fluid px-4 text-end small text-body-secondary" id="updated"></div>
+
+<div class="container-fluid px-4">
+  <div id="error" class="alert alert-danger d-none"></div>
+  <div class="card mb-4">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label small">To</label>
+          <select id="to" class="form-select form-select-sm" multiple size="6"></select>
+          <div class="small text-body-secondary">Ctrl/Cmd-click to choose several users.</div>
+        </div>
+        <div class="col-md-8">
+          <div class="d-flex gap-3 mb-2">
+            <div class="form-check"><input class="form-check-input" type="radio" name="level" value="info" id="lvInfo" checked><label class="form-check-label" for="lvInfo">Info</label></div>
+            <div class="form-check"><input class="form-check-input" type="radio" name="level" value="warning" id="lvWarn"><label class="form-check-label" for="lvWarn">Warning</label></div>
+            <div class="form-check"><input class="form-check-input" type="radio" name="level" value="danger" id="lvDanger"><label class="form-check-label" for="lvDanger">Urgent</label></div>
+          </div>
+          <textarea id="text" class="form-control" rows="4" placeholder="Message"></textarea>
+          <button class="btn btn-primary btn-sm mt-2" onclick="run(send)">Send</button>
+          <span class="small text-body-secondary ms-2">Shown on the hub home and at the top of JupyterLab (within 30 seconds).</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="table-responsive mb-5">
+    <table class="table table-sm table-striped">
+      <thead><tr><th>Sent</th><th>From</th><th>To</th><th>Level</th><th>Message</th><th>Read by</th><th></th></tr></thead>
+      <tbody id="messages"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const base = location.pathname.replace(/\/?$/, "/");
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const num = x => (x === null || x === undefined) ? "" : Math.round(x * 10) / 10;
+const when = t => t ? new Date(t * 1000).toLocaleString() : "never";
+function showError(msg) {
+  const box = document.getElementById("error");
+  box.textContent = msg; box.classList.toggle("d-none", !msg);
+}
+async function api(method, path, body) {
+  const r = await fetch(base + path, {method, credentials: "same-origin",
+    headers: body ? {"Content-Type": "application/json"} : {}, body: body ? JSON.stringify(body) : undefined});
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || r.statusText);
+  return data;
+}
+async function run(fn) { try { showError(""); await fn(); } catch (e) { showError(e.message); } }
+function stamp() { document.getElementById("updated").textContent = "updated " + new Date().toLocaleTimeString(); }
+
+const LEVEL = {info: "text-bg-info", warning: "text-bg-warning", danger: "text-bg-danger"};
+async function load() {
+  const data = await api("GET", "api/notifications");
+  const sel = document.getElementById("to"), chosen = new Set([...sel.selectedOptions].map(o => o.value));
+  sel.innerHTML = `<option value="*">Everyone</option>` +
+    data.users.map(u => `<option value="${esc(u)}">${esc(u)}</option>`).join("");
+  [...sel.options].forEach(o => { o.selected = chosen.has(o.value); });
+  document.getElementById("messages").innerHTML = data.messages.map(m => `<tr>
+    <td>${when(m.created)}</td><td>${esc(m.from)}</td>
+    <td>${m.to === "*" ? "<i>everyone</i>" : esc(m.to.join(", "))}</td>
+    <td><span class="badge ${LEVEL[m.level] || ""}">${m.level === "danger" ? "urgent" : esc(m.level)}</span></td>
+    <td class="msg">${esc(m.text)}</td><td class="small">${esc(m.read_by.join(", "))}</td>
+    <td>${m.id.startsWith("disk-") ? '<span class="small text-body-secondary">automatic</span>' :
+          `<button class="btn btn-outline-danger btn-sm" onclick="run(() => del('${esc(m.id)}'))">Delete</button>`}</td>
+  </tr>`).join("") || `<tr><td colspan="7" class="text-body-secondary">No notifications.</td></tr>`;
+  stamp();
+}
+async function send() {
+  const chosen = [...document.getElementById("to").selectedOptions].map(o => o.value);
+  if (!chosen.length) throw new Error("Choose the recipients (or Everyone).");
+  await api("POST", "api/notifications", {
+    to: chosen.includes("*") ? "*" : chosen,
+    level: document.querySelector('input[name="level"]:checked').value,
+    text: document.getElementById("text").value});
+  document.getElementById("text").value = "";
+  await load();
+}
+async function del(id) {
+  if (!confirm("Delete this notification for everyone?")) return;
+  await api("DELETE", "api/notifications/" + id);
+  await load();
+}
+run(load);
+setInterval(() => run(load), 30000);
+</script>
+</body>
+</html>

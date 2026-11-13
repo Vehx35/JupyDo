@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JupyDo - Save / download environment</title>
+<link rel="stylesheet" href="/hub/static/css/style.min.css">
+<style>
+  td, th { white-space: nowrap; vertical-align: middle; }
+  pre.log { max-height: 260px; overflow: auto; font-size: 12px; background: #0d1117; color: #e6edf3; padding: 10px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<!--JUPYDO_NAVBAR-->
+
+<div class="container px-4">
+  <div id="error" class="alert alert-danger d-none"></div>
+  <h1 class="h3 mb-3">Save or download an environment</h1>
+  <div class="d-flex align-items-center gap-2 mb-1">
+    <label for="envSelect" class="form-label mb-0">Environment:</label>
+    <select id="envSelect" class="form-select" style="max-width:320px"></select>
+  </div>
+  <p class="text-body-secondary small mb-4" id="envInfo"></p>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-6">
+      <div class="card h-100" id="cardCommit"><div class="card-body">
+        <h2 class="h5">Commit (save as image)</h2>
+        <p class="small text-body-secondary">Saves the software of this environment, including what you installed,
+          as <code id="repoHint"></code>. It is never overwritten: each save gets the next number.
+          Everyone can then create an environment from it. Your files in /sharedFolder are not included.</p>
+        <div class="input-group">
+          <input id="name" class="form-control" placeholder="name, e.g. rnaseq" maxlength="41">
+          <button class="btn btn-primary" onclick="run(commit)">Commit</button>
+        </div>
+      </div></div>
+    </div>
+    <div class="col-md-6">
+      <div class="card h-100" id="cardDownload"><div class="card-body">
+        <h2 class="h5">Download</h2>
+        <p class="small text-body-secondary">Exports the current state of this environment as <b>one .zip</b> in
+          <code>/sharedFolder/exports/</code>: the image, <code>run.sh</code> (Linux/macOS) and <code>run.cmd</code> (Windows)
+          to start it with JupyterLab on any computer with Docker, and a README.
+          Your files in /sharedFolder are not included.</p>
+        <button class="btn btn-primary" onclick="run(download)">Download</button>
+      </div></div>
+    </div>
+  </div>
+  <p class="small text-body-secondary">Environments larger than <span id="limit"></span> GB need an admin's approval: the request is sent automatically.</p>
+
+  <div id="tasks"></div>
+  <div id="requests"></div>
+
+  <h2 class="h5 mt-4">Your downloads (/sharedFolder/exports)</h2>
+  <ul id="exports" class="small"></ul>
+
+  <h2 class="h5 mt-4">Saved images (everyone)</h2>
+  <div class="table-responsive mb-5">
+    <table class="table table-sm table-striped">
+      <thead><tr><th>Image</th><th>Saved by</th><th>From environment</th><th>Date</th><th>Size</th></tr></thead>
+      <tbody id="images"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const base = location.pathname.replace(/\/?$/, "/");
+const params = new URLSearchParams(location.search);
+let server = params.get("server");
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const when = t => t ? new Date(t * 1000).toLocaleString() : "";
+let timer = null;
+
+function showError(msg) { const b = document.getElementById("error"); b.textContent = msg; b.classList.toggle("d-none", !msg); }
+async function api(method, path, body) {
+  const r = await fetch(base + path, {method, credentials: "same-origin",
+    headers: body ? {"Content-Type": "application/json"} : {}, body: body ? JSON.stringify(body) : undefined});
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || r.statusText);
+  return data;
+}
+async function run(fn) { try { showError(""); await fn(); } catch (e) { showError(e.message); } }
+
+async function load() {
+  const d = await api("GET", "api/state" + (server === null ? "" : "?server=" + encodeURIComponent(server)));
+  server = d.server;
+  document.getElementById("envSelect").innerHTML = d.environments.map(e =>
+    `<option value="${esc(e)}"${e === server ? " selected" : ""}>${esc(e || "(default)")}</option>`).join("");
+  document.getElementById("envInfo").innerHTML = d.environment
+    ? `Image <code>${esc(d.environment.image)}</code> &middot; ${esc(d.environment.status)}`
+    : "You have no environments yet: create one from the hub home.";
+  document.getElementById("limit").textContent = d.limit_gb;
+  document.getElementById("repoHint").textContent = `jupydo-saved/${d.user}-<name>:<number>`;
+  document.getElementById("tasks").innerHTML = d.tasks.map(t => `
+    <div class="card mb-3"><div class="card-body">
+      <h3 class="h6">${t.kind === "commit" ? "Commit" : "Download"} of ${esc(t.server || "default")}
+        <span class="badge ${t.status === "running" ? "text-bg-primary" : t.status === "done" ? "text-bg-success" : "text-bg-danger"}">${esc(t.status)}</span></h3>
+      <pre class="log mb-0">${esc(t.log.join("\n"))}</pre>
+    </div></div>`).join("");
+  document.getElementById("requests").innerHTML = d.requests.length ? `
+    <h2 class="h5 mt-4">Requests to the admins</h2>
+    <table class="table table-sm"><tbody>${d.requests.map(r => `<tr>
+      <td>${when(r.created)}</td><td>${r.kind === "commit" ? "Commit '" + esc(r.name) + "'" : "Download"} of ${esc(r.server || "default")}</td>
+      <td>${r.size_gb} GB</td><td><span class="badge ${r.status === "pending" ? "text-bg-warning" : r.status === "approved" ? "text-bg-success" : "text-bg-secondary"}">${esc(r.status)}</span></td>
+    </tr>`).join("")}</tbody></table>` : "";
+  document.getElementById("exports").innerHTML = d.exports.map(f => `<li><code>/sharedFolder/exports/${esc(f)}</code></li>`).join("") || "<li class='text-body-secondary'>none</li>";
+  document.getElementById("images").innerHTML = d.saved_images.map(i => `<tr>
+    <td><code>${esc(i.image)}</code></td><td>${esc(i.saved_by)}</td><td>${esc(i.from)}</td>
+    <td>${when(i.saved_at)}</td><td>${i.size_gb} GB</td></tr>`).join("") || `<tr><td colspan="5" class="text-body-secondary">No saved images yet.</td></tr>`;
+  const busy = d.tasks.some(t => t.status === "running");
+  if (busy && !timer) timer = setInterval(() => run(load), 3000);
+  if (!busy && timer) { clearInterval(timer); timer = null; }
+}
+
+async function after(r) {
+  if (r.type === "request")
+    alert(`This environment is ${r.request.size_gb} GB, above the limit: a request was sent to the admins. You will get a notification.`);
+  await load();
+}
+async function commit() {
+  const name = document.getElementById("name").value.trim().toLowerCase();
+  if (!name) throw new Error("Write a name for the image.");
+  await after(await api("POST", "api/commit", {server, name}));
+}
+async function download() { await after(await api("POST", "api/download", {server})); }
+
+document.getElementById("envSelect").addEventListener("change", e => { server = e.target.value; run(load); });
+run(load);
+</script>
+</body>
+</html>

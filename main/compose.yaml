@@ -1,14 +1,23 @@
 services:
   jupyterhub:
+    # Built by GitHub (.github/workflows/hub-image.yml) and downloaded ready-made by
+    # first_start.sh; `docker compose up -d --build` builds it here instead (local changes)
+    image: ghcr.io/vehx35/jupydo-hub:latest
     build:
       context: . # Indicates the current directory as the build context
       dockerfile: Dockerfile.jupyterhub # Specifies the Dockerfile name
     container_name: jupyterhub #container name
+    env_file:
+      - .env
     ports:
       - "8000:8000" # exposes the JupyterHub service on port 8000
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock # Lets dockerspawn use the Docker socket
-      - /srv/JupyDo/jupyterhub_data:/etc/jupyterhub # Persistent data jupyterhub
+      - ${JUPYDO_DATA_PATH:-/srv/JupyDo/jupyterhub_data}:/etc/jupyterhub # Persistent data jupyterhub
+      - ./branding:/etc/jupydo-branding:ro # logo.png and terms.pdf of this installation (edit them there)
+      - ${JUPYDO_PATH:-/srv/JupyDo}/jh_shared:/srv/jh_shared # Shared directory for user notebooks
+      - ${JUPYDO_PATH:-/srv/JupyDo}/builder:/srv/jupydo-builder:ro # Image builder: Dockerfile, modules/, vendor/
+      - ${JUPYDO_PATH:-/srv/JupyDo}/logs/cells:/srv/jupydo-logs/cells # Cell log (only if enabled in first_start.sh)
     networks:
       - jupyterhub_network
     restart: always # Restart the container if it stops

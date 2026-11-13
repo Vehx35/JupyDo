@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JupyDo - Transfer files</title>
+<link rel="stylesheet" href="/hub/static/css/style.min.css">
+<style>
+  td, th { vertical-align: middle; }
+  td.num { white-space: nowrap; text-align: right; }
+  #drop { border: 2px dashed var(--bs-border-color); border-radius: 8px; padding: 28px; text-align: center; cursor: pointer; }
+  #drop.over { border-color: var(--bs-primary); background: var(--bs-primary-bg-subtle); }
+  .crumb { cursor: pointer; }
+  .up .progress { height: 8px; }
+</style>
+</head>
+<body>
+<!--JUPYDO_NAVBAR-->
+
+<div class="container px-4">
+  <div id="error" class="alert alert-danger d-none"></div>
+  <h1 class="h3 mb-1">Transfer files</h1>
+  <p class="text-body-secondary small mb-3">Upload and download large files in your shared folder
+    (<code>/sharedFolder</code> in JupyterLab). Faster than JupyterLab's drag and drop, and it resumes:
+    if an upload stops, choose the same file again in the same folder and it continues from where it stopped;
+    an interrupted download can be resumed from your browser's downloads.</p>
+
+  <nav class="mb-2"><ol class="breadcrumb mb-0" id="crumbs"></ol></nav>
+
+  <div id="drop" class="mb-3">
+    <div>Drop files here to upload them to <b id="dropTarget">this folder</b></div>
+    <div class="small text-body-secondary">or click to choose them</div>
+    <input type="file" id="picker" multiple hidden>
+  </div>
+  <div id="uploads" class="mb-3"></div>
+
+  <table class="table table-sm table-hover">
+    <thead><tr><th>Name</th><th class="text-end">Size</th><th class="text-end">Modified</th><th></th></tr></thead>
+    <tbody id="list"></tbody>
+  </table>
+</div>
+
+<script>
+const base = location.pathname.replace(/\/?$/, "/");
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const when = t => t ? new Date(t * 1000).toLocaleString() : "";
+const human = n => { const u = ["B","KB","MB","GB","TB"]; let i = 0; while (n >= 1024 && i < 4) { n /= 1024; i++; } return (i ? n.toFixed(1) : n) + " " + u[i]; };
+const dur = s => !isFinite(s) ? "" : s < 90 ? Math.round(s) + " s" : s < 5400 ? Math.round(s / 60) + " min" : (s / 3600).toFixed(1) + " h";
+let cwd = "";
+let running = 0;
+
+function showError(msg) { const b = document.getElementById("error"); b.textContent = msg; b.classList.toggle("d-none", !msg); }
+async function api(method, path, body) {
+  const r = await fetch(base + path, {method, credentials: "same-origin",
+    headers: body ? {"Content-Type": "application/json"} : {}, body: body ? JSON.stringify(body) : undefined});
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(data.error || r.statusText); e.status = r.status; throw e; }
+  return data;
+}
+const join = (a, b) => a ? a + "/" + b : b;
+
+// ---------------- folder listing ----------------
+async function load(path) {
+  try {
+    const d = await api("GET", "api/list?path=" + encodeURIComponent(path));
+    cwd = d.path;
+    showError("");
+    const parts = cwd ? cwd.split("/") : [];
+    let acc = "";
+    document.getElementById("crumbs").innerHTML =
+      `<li class="breadcrumb-item crumb" data-p="">sharedFolder</li>` +
+      parts.map(p => { acc = join(acc, p); return `<li class="breadcrumb-item crumb" data-p="${esc(acc)}">${esc(p)}</li>`; }).join("");
+    document.getElementById("dropTarget").textContent = "/sharedFolder" + (cwd ? "/" + cwd : "");
+    document.getElementById("list").innerHTML = d.entries.length ? d.entries.map(e => {
+      const p = join(cwd, e.name);
+      const dl = base + "api/download?path=" + encodeURIComponent(p);
+      return `<tr>
+        <td>${e.dir ? `<a href="#" class="open" data-p="${esc(p)}">📁 ${esc(e.name)}</a>` : esc(e.name)}</td>
+        <td class="num">${e.dir ? "" : human(e.size)}</td>
+        <td class="num">${when(e.mtime)}</td>
+        <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="${dl}" download>${e.dir ? "Download .tar" : "Download"}</a></td>
+      </tr>`;
+    }).join("") : `<tr><td colspan="4" class="text-body-secondary">Empty folder</td></tr>`;
+  } catch (e) { showError(e.message); }
+}
+document.getElementById("crumbs").addEventListener("click", ev => { const p = ev.target.dataset.p; if (p !== undefined) load(p); });
+document.getElementById("list").addEventListener("click", ev => {
+  const a = ev.target.closest("a.open"); if (a) { ev.preventDefault(); load(a.dataset.p); }
+});
+
+// ---------------- uploads ----------------
+const queueList = [];
+const drop = document.getElementById("drop"), picker = document.getElementById("picker");
+drop.addEventListener("click", () => picker.click());
+picker.addEventListener("change", () => { add([...picker.files]); picker.value = ""; });
+["dragenter", "dragover"].forEach(t => drop.addEventListener(t, ev => { ev.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(t => drop.addEventListener(t, ev => { ev.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", ev => add([...ev.dataTransfer.files]));
+window.addEventListener("beforeunload", ev => { if (running) { ev.preventDefault(); ev.returnValue = ""; } });
+
+function add(files) {
+  for (const file of files) {
+    const item = {file, folder: cwd, cancelled: false, el: document.createElement("div")};
+    item.el.className = "up card card-body py-2 mb-2";
+    document.getElementById("uploads").prepend(item.el);
+    status(item, 0, "waiting");
+    queueList.push(item);
+  }
+  next();
+}
+
+function status(item, frac, text, cls = "") {
+  item.el.innerHTML = `<div class="d-flex justify-content-between small">
+      <span><b>${esc(item.file.name)}</b> → /sharedFolder${item.folder ? "/" + esc(item.folder) : ""} (${human(item.file.size)})</span>
+      <span class="${cls}">${esc(text)}</span></div>
+    <div class="progress my-1"><div class="progress-bar" style="width:${(frac * 100).toFixed(1)}%"></div></div>` +
+    (item.done || item.failed ? "" : `<button class="btn btn-sm btn-link p-0 small cancel">Cancel</button>`);
+  const c = item.el.querySelector(".cancel");
+  if (c) c.onclick = () => cancel(item);
+}
+
+async function cancel(item) {
+  item.cancelled = true;
+  if (item.xhr) item.xhr.abort();
+  if (item.id) await api("DELETE", "api/upload/" + item.id).catch(() => {});
+  item.failed = true;
+  status(item, 0, "cancelled", "text-body-secondary");
+}
+
+function putPiece(item, offset, blob, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    item.xhr = xhr;
+    xhr.open("PUT", base + "api/upload/" + item.id + "?offset=" + offset);
+    xhr.withCredentials = true;
+    xhr.upload.onprogress = ev => onProgress(ev.loaded);
+    xhr.onload = () => {
+      let data = {}; try { data = JSON.parse(xhr.responseText); } catch (e) {}
+      if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+      else { const e = new Error(data.error || xhr.statusText); e.status = xhr.status; reject(e); }
+    };
+    xhr.onerror = () => { const e = new Error("connection lost"); e.status = 0; reject(e); };
+    xhr.onabort = () => { const e = new Error("cancelled"); e.status = -1; reject(e); };
+    xhr.send(blob);
+  });
+}
+
+async function upload(item) {
+  const f = item.file;
+  const start = () => api("POST", "api/upload", {path: item.folder, name: f.name, size: f.size, lastModified: f.lastModified});
+  let s = await start();
+  item.id = s.id;
+  let offset = s.offset, failures = 0;
+  const t0 = Date.now(), b0 = offset;
+  const show = sent => {
+    const done = offset + sent, secs = (Date.now() - t0) / 1000, speed = (done - b0) / Math.max(secs, 0.001);
+    status(item, f.size ? done / f.size : 1, `${human(done)} · ${human(speed)}/s · ${dur((f.size - done) / speed)} left`);
+  };
+  if (offset) show(0);
+  while (true) {
+    if (item.cancelled) return;
+    try {
+      const r = await putPiece(item, offset, f.slice(offset, Math.min(offset + s.chunk, f.size)), show);
+      offset = r.offset;
+      failures = 0;
+      if (r.done) break;
+      show(0);
+    } catch (e) {
+      if (item.cancelled || e.status === -1) return;
+      if (e.status === 400 || e.status === 403 || (e.status === 409 && !/offset|already running/.test(e.message))) throw e;
+      failures++;
+      if (failures > 10) throw new Error(e.message + ": stopped after 10 attempts, choose the file again to resume");
+      const wait = Math.min(60, 2 ** failures);
+      status(item, f.size ? offset / f.size : 0, `${e.message}: retrying in ${wait} s`, "text-warning");
+      await new Promise(r => setTimeout(r, wait * 1000));
+      s = await start().catch(() => s);  // where the server really is
+      offset = s.offset;
+    }
+  }
+  item.done = true;
+  const secs = (Date.now() - t0) / 1000;
+  status(item, 1, `done in ${dur(secs)} (${human((f.size - b0) / Math.max(secs, 0.001))}/s)`, "text-success");
+}
+
+async function next() {
+  if (running) return;
+  const item = queueList.shift();
+  if (!item) return;
+  running = 1;
+  try { await upload(item); }
+  catch (e) { item.failed = true; status(item, 0, e.message, "text-danger"); }
+  running = 0;
+  if (item.folder === cwd) load(cwd);
+  next();
+}
+
+load("");
+</script>
+</body>
+</html>

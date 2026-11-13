@@ -1,0 +1,73 @@
+{#
+  JupyDo version of NativeAuthenticator's Authorization area: adds "Valid until".
+  At the end of that day the user is no longer authorized (their environments are
+  stopped, containers and data are kept) and must be authorized again here.
+  Empty = no expiry. Admins never expire.
+#}
+{% extends "page.html" %}
+
+{% block main %}
+<div class="container">
+    <h1>Authorization area</h1>
+
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Username</th>
+                {% if ask_email %}<th>Email</th>{% endif %}
+                <th>Has 2FA?</th>
+                <th>Is authorized?</th>
+                <th>Valid until</th>
+                <th></th>
+                <th></th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            {% if user.is_authorized %}
+            <tr class="success" id={{ user.username }}>
+                <td>{{ user.username }}</td>
+                {% if ask_email %}<td>{{ user.email }}</td>{% endif %}
+                <td>{{ user.has_2fa }}</td>
+                <td>Yes</td>
+                <td>
+                    {% set exp = (jupydo_expiry or {}).get(user.username, {}) %}
+                    <form method="post" action="{{ base_url }}jupydo/expiry/{{ user.username }}" class="d-flex gap-1 align-items-center">
+                        <input type="hidden" name="_xsrf" value="{{ xsrf }}">
+                        <input type="date" name="valid_until" class="form-control form-control-sm" style="width:150px"
+                               value="{{ exp.get('until', '') }}">
+                        <button type="submit" class="btn btn-sm btn-outline-primary">Save</button>
+                    </form>
+                    {% if exp.get('expired_on') %}<div class="small text-danger">expired on {{ exp.expired_on }}</div>{% endif %}
+                </td>
+                <td><a class="btn btn-default" href="{{ base_url }}authorize/{{ user.username }}" role="button">Unauthorize</a></td>
+                <td><a class="btn btn-jupyter" href="{{ base_url }}change-password/{{ user.username }}" role="button">Change password</a></td>
+                <td></td>
+            </tr>
+            {% else %}
+            <tr id={{ user.username }}>
+                <td>{{ user.username }}</td>
+                {% if ask_email %}<td>{{ user.email }}</td>{% endif %}
+                <td>{{ user.has_2fa }}</td>
+                <td>No</td>
+                <td>
+                    {% set exp = (jupydo_expiry or {}).get(user.username, {}) %}
+                    <form method="post" action="{{ base_url }}jupydo/expiry/{{ user.username }}" class="d-flex gap-1 align-items-center">
+                        <input type="hidden" name="_xsrf" value="{{ xsrf }}">
+                        <input type="date" name="valid_until" class="form-control form-control-sm" style="width:150px"
+                               value="{{ exp.get('until', '') }}">
+                        <button type="submit" class="btn btn-sm btn-outline-primary">Save</button>
+                    </form>
+                    {% if exp.get('expired_on') %}<div class="small text-danger">expired on {{ exp.expired_on }}</div>{% endif %}
+                </td>
+                <td><a class="btn btn-jupyter" href="{{ base_url }}authorize/{{ user.username }}" role="button">Authorize</a></td>
+                <td><a class="btn btn-jupyter" href="{{ base_url }}change-password/{{ user.username }}" role="button">Change password</a></td>
+                <td><a class="btn btn-jupyter" href="{{ base_url }}discard/{{ user.username }}" role="button">Discard</a></td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

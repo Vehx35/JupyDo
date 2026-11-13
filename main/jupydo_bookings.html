@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JupyDo - Bookings</title>
+<link rel="stylesheet" href="/hub/static/css/style.min.css">
+<style>
+  .cal { display: grid; grid-template-columns: 52px repeat(7, 1fr); border: 1px solid var(--bs-border-color); }
+  .cal .head { text-align: center; font-weight: 600; padding: 4px; border-bottom: 1px solid var(--bs-border-color); font-size: .9rem; }
+  .cal .head.today { color: var(--bs-primary); }
+  .cal .hours { font-size: .75rem; color: var(--bs-secondary-color); }
+  .cal .hours div, .cal .day .slot { height: 26px; border-top: 1px solid var(--bs-border-color-translucent); }
+  .cal .hours div { text-align: right; padding-right: 4px; }
+  .cal .day { position: relative; border-left: 1px solid var(--bs-border-color); }
+  .cal .day .slot { cursor: pointer; }
+  .cal .day .slot:hover { background: var(--bs-primary-bg-subtle); }
+  .cal .day .slot.past { cursor: default; background: var(--bs-tertiary-bg); }
+  .bk { position: absolute; left: 2px; right: 2px; border-radius: 4px; padding: 1px 4px; font-size: .75rem;
+        overflow: hidden; background: var(--bs-secondary-bg); border: 1px solid var(--bs-border-color); z-index: 1; }
+  .bk.mine { background: var(--bs-primary-bg-subtle); border-color: var(--bs-primary); cursor: pointer; }
+  .res-btn.active { font-weight: 600; }
+</style>
+</head>
+<body>
+<!--JUPYDO_NAVBAR-->
+
+<div class="container-fluid px-4">
+  <div id="error" class="alert alert-danger d-none"></div>
+  <h1 class="h3 mb-1">Bookings</h1>
+  <p class="text-body-secondary small mb-3">A shared calendar to agree on who uses what and when (for example a GPU).
+    It does not block anything: it is an agreement among users. Click an empty hour to book it, or use the form;
+    click one of your bookings to cancel it. Times are in your browser's time zone.</p>
+
+  <div id="noResources" class="alert alert-info d-none">No bookable resources yet: an admin creates them below.</div>
+  <div class="d-flex flex-wrap gap-2 mb-2" id="resources"></div>
+  <p class="small text-body-secondary mb-2" id="resDescription"></p>
+
+  <div id="calendarBox" class="d-none">
+    <div class="d-flex align-items-center gap-2 mb-2">
+      <button class="btn btn-sm btn-outline-secondary" onclick="shiftWeek(-1)">&larr;</button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="weekStart = monday(new Date()); draw()">This week</button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="shiftWeek(1)">&rarr;</button>
+      <span class="ms-2 fw-semibold" id="weekLabel"></span>
+    </div>
+    <div class="cal mb-3" id="cal"></div>
+
+    <form class="row g-2 align-items-end mb-4" onsubmit="event.preventDefault(); run(book)">
+      <div class="col-auto"><label class="form-label small mb-0">From</label>
+        <input type="datetime-local" id="from" class="form-control form-control-sm" step="900" required></div>
+      <div class="col-auto"><label class="form-label small mb-0">To</label>
+        <input type="datetime-local" id="to" class="form-control form-control-sm" step="900" required></div>
+      <div class="col"><label class="form-label small mb-0">Note (optional)</label>
+        <input type="text" id="note" class="form-control form-control-sm" maxlength="200" placeholder="e.g. model training"></div>
+      <div class="col-auto"><button class="btn btn-primary btn-sm">Book <span id="bookWhat"></span></button></div>
+    </form>
+  </div>
+
+  <h2 class="h6">My upcoming bookings</h2>
+  <ul class="list-unstyled small mb-4" id="mine"></ul>
+
+  <div id="adminBox" class="d-none">
+    <h2 class="h6">Bookable resources (admins)</h2>
+    <form class="row g-2 align-items-end mb-2" onsubmit="event.preventDefault(); run(addResource)">
+      <div class="col-auto"><input type="text" id="resName" class="form-control form-control-sm" maxlength="80" placeholder="Name, e.g. GPU 0" required></div>
+      <div class="col"><input type="text" id="resDesc" class="form-control form-control-sm" maxlength="300" placeholder="Description, e.g. NVIDIA RTX 4060, 8 GB"></div>
+      <div class="col-auto"><button class="btn btn-outline-primary btn-sm">Add resource</button></div>
+    </form>
+    <ul class="list-unstyled small" id="resList"></ul>
+  </div>
+</div>
+
+<script>
+const base = location.pathname.replace(/\/?$/, "/");
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pad = n => String(n).padStart(2, "0");
+const DAY = 86400000;
+let state = {resources: [], bookings: [], me: "", admin: false};
+let current = null;
+const monday = d => { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
+let weekStart = monday(new Date());
+
+function showError(m) { const b = document.getElementById("error"); b.textContent = m; b.classList.toggle("d-none", !m); }
+async function api(method, path, body) {
+  const r = await fetch(base + path, {method, credentials: "same-origin",
+    headers: body ? {"Content-Type": "application/json"} : {}, body: body ? JSON.stringify(body) : undefined});
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || r.statusText);
+  return data;
+}
+async function run(f) { try { showError(""); await f(); } catch (e) { showError(e.message); } }
+const localInput = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+const fmt = t => new Date(t * 1000).toLocaleString([], {weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"});
+
+async function load() {
+  state = await api("GET", "api/state");
+  if (!state.resources.some(r => r.id === current)) current = state.resources[0]?.id || null;
+  draw();
+}
+
+function draw() {
+  document.getElementById("noResources").classList.toggle("d-none", state.resources.length > 0);
+  document.getElementById("calendarBox").classList.toggle("d-none", !current);
+  document.getElementById("adminBox").classList.toggle("d-none", !state.admin);
+  document.getElementById("resources").innerHTML = state.resources.map(r =>
+    `<button class="btn btn-sm ${r.id === current ? "btn-primary active" : "btn-outline-primary"} res-btn"
+       onclick="current='${r.id}'; draw()">${esc(r.name)}</button>`).join("");
+  const res = state.resources.find(r => r.id === current);
+  document.getElementById("resDescription").textContent = res ? res.description : "";
+  document.getElementById("bookWhat").textContent = res ? res.name : "";
+  document.getElementById("resList").innerHTML = state.resources.map(r =>
+    `<li>${esc(r.name)} <span class="text-body-secondary">${esc(r.description)}</span>
+     <button class="btn btn-link btn-sm text-danger p-0 ms-2" onclick="run(() => delResource('${r.id}', '${esc(r.name)}'))">delete</button></li>`).join("");
+  const now = Date.now() / 1000;
+  const mine = state.bookings.filter(b => b.user === state.me && b.end > now).sort((a, b) => a.start - b.start);
+  document.getElementById("mine").innerHTML = mine.length ? mine.map(b => {
+    const r = state.resources.find(x => x.id === b.resource);
+    return `<li>${esc(r ? r.name : "?")}: ${fmt(b.start)} &rarr; ${fmt(b.end)} ${b.note ? "(" + esc(b.note) + ")" : ""}
+      <button class="btn btn-link btn-sm text-danger p-0 ms-2" onclick="run(() => cancel('${b.id}'))">cancel</button></li>`;
+  }).join("") : `<li class="text-body-secondary">none</li>`;
+  if (current) drawWeek();
+}
+
+function drawWeek() {
+  const end = new Date(weekStart.getTime() + 7 * DAY);
+  document.getElementById("weekLabel").textContent =
+    `${weekStart.toLocaleDateString([], {day: "numeric", month: "short"})} – ${new Date(end - DAY).toLocaleDateString([], {day: "numeric", month: "short", year: "numeric"})}`;
+  const today = new Date().toDateString();
+  let html = `<div></div>`;
+  for (let d = 0; d < 7; d++) {
+    const day = new Date(weekStart.getTime() + d * DAY);
+    html += `<div class="head ${day.toDateString() === today ? "today" : ""}">${day.toLocaleDateString([], {weekday: "short", day: "numeric"})}</div>`;
+  }
+  html += `<div class="hours">${[...Array(24).keys()].map(h => `<div>${pad(h)}:00</div>`).join("")}</div>`;
+  const now = Date.now();
+  for (let d = 0; d < 7; d++) {
+    const dayStart = new Date(weekStart); dayStart.setDate(dayStart.getDate() + d);
+    html += `<div class="day">`;
+    for (let h = 0; h < 24; h++) {
+      const t = new Date(dayStart); t.setHours(h);
+      const past = t.getTime() + 3600000 <= now;
+      html += `<div class="slot ${past ? "past" : ""}" ${past ? "" : `onclick="pick(${t.getTime()})"`}></div>`;
+    }
+    const d0 = dayStart.getTime() / 1000, d1 = d0 + 86400;
+    for (const b of state.bookings.filter(b => b.resource === current && b.start < d1 && b.end > d0)) {
+      const top = (Math.max(b.start, d0) - d0) / 3600 * 26, height = Math.max((Math.min(b.end, d1) - Math.max(b.start, d0)) / 3600 * 26 - 2, 12);
+      const mine = b.user === state.me;
+      html += `<div class="bk ${mine ? "mine" : ""}" style="top:${top}px;height:${height}px"
+                 title="${esc(b.user)}: ${fmt(b.start)} → ${fmt(b.end)} ${esc(b.note)}"
+                 ${mine || state.admin ? `onclick="event.stopPropagation(); run(() => cancel('${b.id}'))"` : ""}>
+                 <b>${esc(b.user)}</b> ${esc(b.note)}</div>`;
+    }
+    html += `</div>`;
+  }
+  document.getElementById("cal").innerHTML = html;
+}
+
+function shiftWeek(n) { weekStart = new Date(weekStart.getTime() + n * 7 * DAY); weekStart = monday(weekStart); draw(); }
+function pick(ms) {
+  document.getElementById("from").value = localInput(new Date(ms));
+  document.getElementById("to").value = localInput(new Date(ms + 3600000));
+  document.getElementById("note").focus();
+}
+async function book() {
+  const from = new Date(document.getElementById("from").value).getTime() / 1000;
+  const to = new Date(document.getElementById("to").value).getTime() / 1000;
+  await api("POST", "api/bookings", {resource: current, start: from, end: to, note: document.getElementById("note").value});
+  document.getElementById("note").value = "";
+  await load();
+}
+async function cancel(id) {
+  const b = state.bookings.find(x => x.id === id);
+  if (!confirm(`Cancel the booking of ${b.user}, ${fmt(b.start)} → ${fmt(b.end)}?`)) return;
+  await api("DELETE", "api/bookings/" + id);
+  await load();
+}
+async function addResource() {
+  await api("POST", "api/resources", {name: document.getElementById("resName").value, description: document.getElementById("resDesc").value});
+  document.getElementById("resName").value = ""; document.getElementById("resDesc").value = "";
+  await load();
+}
+async function delResource(id, name) {
+  if (!confirm(`Delete ${name} and all its bookings?`)) return;
+  await api("DELETE", "api/resources/" + id);
+  await load();
+}
+run(load);
+setInterval(() => run(load), 60000);
+</script>
+</body>
+</html>

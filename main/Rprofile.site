@@ -1,0 +1,69 @@
+# Injected by JupyDo (R_PROFILE): job queue magics for the R kernel (IRkernel).
+#
+#   %%job --time 2h --cpus 4 --mem 16 --name deseq     (first line of a cell)
+#   %jobs  |  %job_log <id> [n]  |  %job_cancel <id>   (alone in a cell)
+#
+# Same syntax as the Python %%job magic. The cell runs with Rscript in a NEW
+# container, made from a snapshot of this environment taken when the job is
+# submitted (same software, including what you installed, same /sharedFolder):
+# session variables are not available, only files written are kept.
+
+# R_PROFILE replaces the image's own site profile: load it first, unchanged.
+local({
+  site <- file.path(R.home("etc"), "Rprofile.site")
+  if (file.exists(site)) source(site)
+})
+
+local({
+  cli <- "/opt/jobqueue/jobqueue_cli.py"
+
+  run_cli <- function(args) {
+    # JupyDo's own Python runs the client (by its full path: it is not in the user's
+    # PATH and is not a kernel), so the queue works also in images without Python
+    py <- "/opt/python4Jup/bin/python3"
+    if (!file.exists(py)) py <- Sys.which("python3")
+    if (!nzchar(py)) return("stop('Job queue: no Python to run the job queue client', call. = FALSE)")
+    out <- suppressWarnings(system2(py, c(shQuote(cli), args), stdout = TRUE, stderr = TRUE))
+    text <- paste(out, collapse = "\n")
+    if (!is.null(attr(out, "status"))) {
+      return(paste0("stop(", paste(deparse(text), collapse = ""), ", call. = FALSE)"))
+    }
+    paste0("cat(", paste(deparse(text), collapse = ""), ", '\\n', sep = '')")
+  }
+
+  # Returns the (possibly rewritten) code of a cell
+  rewrite <- function(input) {
+    if (grepl("^\\s*%%job(\\s|$)", input)) {
+      first <- sub("\n.*$", "", input)
+      opts <- trimws(sub("^\\s*%%job", "", first))
+      body <- if (grepl("\n", input)) sub("^[^\n]*\n", "", input) else ""
+      if (!nzchar(trimws(body))) return("stop('%%job: the cell has no code to run', call. = FALSE)")
+      script <- tempfile(fileext = ".R")
+      writeLines(body, script)
+      rscript <- file.path(R.home("bin"), "Rscript")
+      return(run_cli(c("submit", shQuote(script), opts, "--interpreter", shQuote(rscript),
+                       "--context", shQuote("this notebook"))))
+    }
+    line <- trimws(input)
+    if (grepl("^%jobs$", line)) return(run_cli("list"))
+    m <- regmatches(line, regexec("^%job_log\\s+([a-z0-9]+)(\\s+([0-9]+))?$", line))[[1]]
+    if (length(m)) return(run_cli(c("log", m[2], if (nzchar(m[4])) m[4])))
+    m <- regmatches(line, regexec("^%job_cancel\\s+([a-z0-9]+)$", line))[[1]]
+    if (length(m)) return(run_cli(c("cancel", m[2])))
+    input
+  }
+
+  # IRkernel runs every cell through evaluate::evaluate(): wrap the copy it imports.
+  setHook(packageEvent("IRkernel", "onLoad"), function(...) {
+    imports <- parent.env(asNamespace("IRkernel"))
+    if (!exists("evaluate", envir = imports, inherits = FALSE)) return(invisible())
+    original <- get("evaluate", envir = imports)
+    wrapped <- function(input, ...) {
+      if (is.character(input) && length(input) == 1L) input <- rewrite(input)
+      original(input, ...)
+    }
+    unlockBinding("evaluate", imports)
+    assign("evaluate", wrapped, envir = imports)
+    lockBinding("evaluate", imports)
+  })
+})

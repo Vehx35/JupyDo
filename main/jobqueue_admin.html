@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JupyDo - Job queue</title>
+<!-- Same look as the hub: its stylesheet and its light/dark theme -->
+<link rel="stylesheet" href="/hub/static/css/style.min.css">
+<style>
+  td, th { white-space: nowrap; vertical-align: middle; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.info { max-width: 380px; overflow: hidden; text-overflow: ellipsis; }
+  .stat { font-size: 1.4rem; font-weight: 600; }
+  #logText { max-height: 60vh; overflow: auto; font-size: 12px; background: #0d1117; color: #e6edf3; }
+</style>
+</head>
+<body>
+<!--JUPYDO_NAVBAR-->
+<div class="container-fluid px-4 text-end small text-body-secondary" id="updated"></div>
+
+<div class="container-fluid px-4">
+  <div id="error" class="alert alert-danger d-none"></div>
+
+  <div class="row g-3 mb-4" id="pool"></div>
+
+  <div class="d-flex align-items-center gap-3 mb-2">
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" id="hideFinished" checked>
+      <label class="form-check-label" for="hideFinished">Hide finished jobs</label>
+    </div>
+    <span class="small text-body-secondary" id="counts"></span>
+  </div>
+  <div class="table-responsive mb-5">
+    <table class="table table-sm table-striped">
+      <thead><tr>
+        <th>ID</th><th>User</th><th>Name</th><th>State</th>
+        <th class="text-end">CPU</th><th class="text-end">Mem</th><th class="text-end">GPU</th>
+        <th class="text-end">Limit</th><th class="text-end">Waited / Elapsed</th>
+        <th>Queue</th><th>Info</th><th></th>
+      </tr></thead>
+      <tbody id="jobs"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Log viewer -->
+<div class="modal fade" id="logModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="logTitle"></h5>
+        <button type="button" class="btn-close" onclick="closeLog()"></button>
+      </div>
+      <pre class="m-0 p-3" id="logText"></pre>
+    </div>
+  </div>
+</div>
+
+<script>
+const base = location.pathname.replace(/\/?$/, "/");
+let logJob = null;
+const STATE = {pending: "text-bg-warning", running: "text-bg-primary", done: "text-bg-success",
+               failed: "text-bg-danger", killed: "text-bg-danger", lost: "text-bg-danger",
+               cancelled: "text-bg-secondary"};
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const num = x => Math.round(x * 10) / 10;
+function dur(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+  return h ? `${h}h${String(m).padStart(2, "0")}m` : `${m}m${String(s).padStart(2, "0")}s`;
+}
+
+function card(label, used, total, unit, note) {
+  const pct = total > 0 ? Math.min(100, 100 * used / total) : 0;
+  return `<div class="col-md-3"><div class="card h-100"><div class="card-body">
+    <div class="small text-body-secondary text-uppercase">${label}</div>
+    <div class="stat">${num(used)} / ${num(total)} ${unit}</div>
+    <div class="progress" style="height:6px"><div class="progress-bar" style="width:${pct}%"></div></div>
+    ${note ? `<div class="small text-body-secondary mt-1">${note}</div>` : ""}
+  </div></div></div>`;
+}
+
+async function refresh() {
+  try {
+    const r = await fetch(base + "admin/state", {credentials: "same-origin"});
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
+    render(await r.json());
+    document.getElementById("error").classList.add("d-none");
+  } catch (e) {
+    const box = document.getElementById("error");
+    box.textContent = "Update failed: " + e.message; box.classList.remove("d-none");
+  }
+}
+
+function render(data) {
+  const p = data.pool, now = data.now;
+  document.getElementById("pool").innerHTML =
+    card("CPU used by jobs", p.cpus - p.interactive_cpus - p.free_cpus, p.cpus - p.interactive_cpus, "cores",
+         `machine pool ${num(p.cpus)}, ${num(p.interactive_cpus)} kept for ${p.interactive_count} interactive environments`) +
+    card("Memory used by jobs", p.mem_gb - p.interactive_mem_gb - p.free_mem_gb, p.mem_gb - p.interactive_mem_gb, "GB",
+         `machine pool ${num(p.mem_gb)} GB, ${num(p.interactive_mem_gb)} GB kept for interactive environments`) +
+    card("GPU used", p.gpus.length - p.free_gpus.length, p.gpus.length, p.gpus.length ? `(IDs ${p.gpus.join(",")})` : "") +
+    `<div class="col-md-3"><div class="card h-100"><div class="card-body">
+       <div class="small text-body-secondary text-uppercase">Jobs</div>
+       <div class="stat">${p.running} running &middot; ${p.pending} pending</div></div></div></div>`;
+
+  const hide = document.getElementById("hideFinished").checked;
+  const rank = {running: 0, pending: 1};
+  const jobs = data.jobs
+    .filter(j => !hide || j.state === "running" || j.state === "pending")
+    .sort((a, b) => ((rank[a.state] ?? 2) - (rank[b.state] ?? 2)) ||
+                    (a.state === "pending" ? a.position - b.position : b.submitted_at - a.submitted_at));
+
+  document.getElementById("counts").textContent = `${jobs.length} of ${data.jobs.length} jobs shown`;
+  document.getElementById("jobs").innerHTML = jobs.map(j => {
+    let time, queue = "", info = esc(j.error || "");
+    if (j.state === "pending") {
+      time = dur(now - j.submitted_at);
+      queue = `#${j.position} <span class="text-body-secondary small">(prio ${j.priority})</span>`;
+    } else if (j.state === "running") {
+      time = dur(now - j.started_at);
+      if (j.gpu_ids.length) info = "GPU " + esc(j.gpu_ids.join(","));
+      if (j.stop_sent_at) info = "stopping&hellip; " + info;
+    } else {
+      time = dur((j.ended_at || now) - (j.started_at || j.submitted_at));
+      if (!info && j.exit_code !== null) info = "exit " + j.exit_code;
+    }
+    const active = j.state === "running" || j.state === "pending";
+    const actions =
+      `<button class="btn btn-outline-secondary btn-sm" onclick="openLog('${j.id}')">Log</button> ` +
+      (active && !j.stop_sent_at ? `<button class="btn btn-outline-danger btn-sm" onclick="kill('${j.id}','${esc(j.user)}')">Kill</button>` : "") +
+      (!active ? `<button class="btn btn-outline-danger btn-sm" onclick="removeJob('${j.id}','${esc(j.user)}')">Delete</button>` : "");
+    return `<tr>
+      <td><code>${j.id}</code></td><td>${esc(j.user)}${j.server_name ? "/" + esc(j.server_name) : ""}</td>
+      <td>${esc(j.name)}</td><td><span class="badge ${STATE[j.state] || "text-bg-secondary"}">${j.state}</span></td>
+      <td class="num">${num(j.cpus)}</td><td class="num">${num(j.mem_gb)}G</td><td class="num">${j.gpus}</td>
+      <td class="num">${dur(j.walltime_s)}</td><td class="num">${time}</td>
+      <td>${queue}</td><td class="info small" title="${esc(j.error || "")}">${info}</td>
+      <td>${actions}</td></tr>`;
+  }).join("") || `<tr><td colspan="12" class="text-body-secondary">No jobs.</td></tr>`;
+
+  document.getElementById("updated").textContent = "updated " + new Date().toLocaleTimeString();
+}
+
+async function kill(id, user) {
+  if (!confirm(`Kill job ${id} of user ${user}?`)) return;
+  await killOrDelete(id);
+}
+async function removeJob(id, user) {
+  if (!confirm(`Delete finished job ${id} of user ${user}?\n\nIt is removed from the list, and its folder ` +
+               `/sharedFolder/.jobs/${id} (log and script) is deleted. Files the job wrote elsewhere are kept.`)) return;
+  await killOrDelete(id);
+}
+async function killOrDelete(id) {
+  const r = await fetch(base + "admin/jobs/" + id, {method: "DELETE", credentials: "same-origin"});
+  if (!r.ok) alert("Failed: " + ((await r.json().catch(() => ({}))).error || r.statusText));
+  refresh();
+}
+
+async function loadLog() {
+  if (!logJob) return;
+  const r = await fetch(base + "admin/jobs/" + logJob + "/log", {credentials: "same-origin"});
+  const data = await r.json().catch(() => ({log: "Could not load log."}));
+  const pre = document.getElementById("logText");
+  const atBottom = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 5;
+  pre.textContent = data.log || data.error || "(empty)";
+  if (atBottom) pre.scrollTop = pre.scrollHeight;
+}
+function openLog(id) {
+  logJob = id;
+  document.getElementById("logTitle").textContent = "Log of job " + id + " (last 200 lines)";
+  document.getElementById("logText").textContent = "Loading...";
+  const m = document.getElementById("logModal");
+  m.classList.add("show"); m.style.display = "block";
+  loadLog();
+}
+function closeLog() {
+  logJob = null;
+  const m = document.getElementById("logModal");
+  m.classList.remove("show"); m.style.display = "none";
+}
+
+document.getElementById("hideFinished").addEventListener("change", refresh);
+refresh();
+setInterval(() => { refresh(); loadLog(); }, 5000);
+</script>
+</body>
+</html>

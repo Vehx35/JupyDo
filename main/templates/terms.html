@@ -1,0 +1,36 @@
+{#
+  JupyDo: accept the current terms of use (branding/terms.pdf of the repository).
+  Shown before the home page when the user has not accepted this version yet:
+  first login with GitHub, users registered before the terms existed, and
+  everyone after the PDF is replaced. Environments cannot start before.
+#}
+{% extends "page.html" %}
+
+{% block main %}
+<div class="container" style="max-width: 900px">
+  <h1 class="h3 mb-2">Terms of use of {{ jupydo_server_name }}</h1>
+  <p class="text-body-secondary">To use this server you must read and accept its terms of use.
+    If they have changed since your last visit, please read the new version.</p>
+
+  {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+
+  <p class="mb-4">
+    <a class="btn btn-outline-primary btn-lg" href="{{ base_url }}jupydo/terms.pdf" target="_blank">
+      Read the terms of use (PDF)</a>
+  </p>
+
+  <form method="post" action="{{ base_url }}jupydo/terms">
+    <input type="hidden" name="_xsrf" value="{{ xsrf }}">
+    <div class="mb-3" style="max-width: 420px">
+      <label for="email" class="form-label">Your email</label>
+      <input id="email" name="email" type="email" class="form-control" value="{{ email }}" required>
+    </div>
+    <div class="form-check mb-3">
+      <input class="form-check-input" type="checkbox" id="accept" name="accept" value="1" required>
+      <label class="form-check-label" for="accept">I have read and accept the terms of use of this server</label>
+    </div>
+    <button type="submit" class="btn btn-primary">Accept and continue</button>
+    <a class="btn btn-link" href="{{ base_url }}logout">Log out</a>
+  </form>
+</div>
+{% endblock %}
