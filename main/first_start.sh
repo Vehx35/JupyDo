@@ -277,6 +277,62 @@ EOF_TIMER
         fi
     fi
 
+    # --- Notebook cell log (the code users run in JupyterLab): asked every time ---
+    echo "Notebook cell log: the code users run in JupyterLab cells (notebooks and consoles, any language)"
+    echo "is recorded, one file per user in $JUPYDO_FULL_PATH/logs/cells, readable only by root."
+    read -p "Enable the notebook cell log (users must be informed)? (y/n): " ENABLE_CELLLOG
+    if [[ "$ENABLE_CELLLOG" =~ ^[Yy]$ ]]; then
+        echo "JUPYDO_CELL_LOG=yes" >> .env
+        mkdir -p "$JUPYDO_FULL_PATH/logs/cells" && chmod 700 "$JUPYDO_FULL_PATH/logs/cells"
+        echo "Cell log enabled. Environments created before now are logged once they are recreated."
+    else
+        echo "JUPYDO_CELL_LOG=no" >> .env
+        echo "Cell log disabled."
+    fi
+
+    # --- Network connection log (who connected where): asked every time ---
+    echo "Network connection log: every connection from users' environments and queue jobs to outside"
+    echo "is recorded (time, user, container, destination, public port), one file per day in"
+    echo "$JUPYDO_FULL_PATH/logs/network, readable only by root."
+    read -p "Enable the network connection log (users must be informed)? (y/n): " ENABLE_NETLOG
+    if [[ "$ENABLE_NETLOG" =~ ^[Yy]$ ]]; then
+        read -p "Keep the network log for how many days? " NETLOG_DAYS
+        while ! [[ "$NETLOG_DAYS" =~ ^[0-9]+$ ]] || [ "$NETLOG_DAYS" -lt 1 ]; do
+            read -p "Please type a number of days (e.g. 365): " NETLOG_DAYS
+        done
+        if ! command -v conntrack &> /dev/null; then
+            if command -v apt-get &> /dev/null; then
+                apt-get install -y -qq conntrack
+            else
+                echo "WARNING: install conntrack (conntrack-tools) by hand: the network log needs it."
+            fi
+        fi
+        install -D -m 755 ./jupydo-netlog.py /usr/local/lib/jupydo/jupydo-netlog.py
+        cat > /etc/systemd/system/jupydo-netlog.service <<EOF_NETLOG
+[Unit]
+Description=JupyDo: network connection log (users' environments and jobs)
+After=docker.service
+Wants=docker.service
+
+[Service]
+ExecStart=/usr/bin/python3 /usr/local/lib/jupydo/jupydo-netlog.py --out $JUPYDO_FULL_PATH/logs/network --retention-days $NETLOG_DAYS
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF_NETLOG
+        systemctl daemon-reload
+        systemctl enable jupydo-netlog.service >/dev/null 2>&1
+        systemctl restart jupydo-netlog.service
+        echo "Network log enabled: $JUPYDO_FULL_PATH/logs/network/ (kept $NETLOG_DAYS days, root only)."
+    elif systemctl is-enabled jupydo-netlog.service &> /dev/null; then
+        systemctl disable --now jupydo-netlog.service
+        echo "Network log disabled (the files already written are kept)."
+    else
+        echo "Network log disabled."
+    fi
+
     # --- The builder and its vendored bundles (everything needed to build users'
     # environments, also offline): from the Zenodo record below, published with
     # jupydo-builder's scripts/publish-zenodo.py. Every file is checked against the

@@ -730,12 +730,9 @@ if JUPYDO_CELL_LOG:
         os.chmod(f'/srv/jh_shared/.celllog/{_f}', 0o644)
     c.DockerSpawner.volumes[f'{base_path}/jh_shared/.celllog'] = {'bind': '/opt/jupydo-celllog', 'mode': 'ro'}
     c.DockerSpawner.environment.update({
-        'JUPYTER_CONFIG_PATH': '/opt/jupydo-celllog',  # makes the module importable
+        'JUPYTER_CONFIG_PATH': '/opt/jupydo-celllog',  # its jupyter_server_config.py enables it
         'JUPYDO_CELLLOG_URL': 'http://jupyterhub:8000/services/celllog/api/cells',
     })
-    # on the command line: it takes precedence over any configuration file of the user
-    c.Spawner.args.append('--ServerApp.kernel_websocket_connection_class='
-                          'jupydo_celllog_server.CellLogConnection')
 
 # =============================================================================
 #                           Batch job queue (%%job magic)
