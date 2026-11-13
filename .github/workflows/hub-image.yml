@@ -1,11 +1,12 @@
 # Builds the JupyDo hub image (main/Dockerfile.jupyterhub) for amd64 and arm64 and publishes
-# it on ghcr.io as <owner>/jupydo-hub:<commit> and :latest. first_start.sh downloads it
-# ready-made (docker compose pull); `docker compose up -d --build` still builds it locally.
+# it on ghcr.io as <owner>/jupydo-hub:<commit> and :<branch>; :latest only for main, so a
+# branch can be tried (JUPYDO_HUB_TAG=<branch>, see compose.yaml) before it is merged.
+# first_start.sh downloads it ready-made; `docker compose up -d --build` builds it locally.
 name: hub-image
 
 on:
   push:
-    branches: [main]
+    branches: ["**"]
   workflow_dispatch:
 
 permissions:
@@ -54,6 +55,8 @@ jobs:
       - uses: docker/setup-buildx-action@v3
       - name: One image for both architectures
         run: |
-          docker buildx imagetools create -t $IMAGE:${{ github.sha }} -t $IMAGE:latest \
-            $IMAGE:${{ github.sha }}-amd64 $IMAGE:${{ github.sha }}-arm64
+          BRANCH="$(echo "${GITHUB_REF_NAME}" | tr -c 'a-zA-Z0-9_.-\n' '-')"
+          TAGS="-t $IMAGE:${{ github.sha }} -t $IMAGE:$BRANCH"
+          [ "$GITHUB_REF_NAME" = main ] && TAGS="$TAGS -t $IMAGE:latest"
+          docker buildx imagetools create $TAGS $IMAGE:${{ github.sha }}-amd64 $IMAGE:${{ github.sha }}-arm64
           docker buildx imagetools inspect $IMAGE:${{ github.sha }}
