@@ -18,6 +18,7 @@ permissions:
 jobs:
   build:
     strategy:
+      fail-fast: false   # one architecture failing does not cancel the other
       matrix:
         include:
           - arch: amd64
@@ -51,7 +52,11 @@ jobs:
         run: |
           JUPYDO_HUB_TAG=build ./main/build-hub.sh /tmp/vendor
           docker tag ghcr.io/vehx35/jupydo-hub:build $IMAGE:${{ github.sha }}-${{ matrix.arch }}
-          docker push $IMAGE:${{ github.sha }}-${{ matrix.arch }}
+          for try in 1 2 3; do   # ghcr.io sometimes refuses a push for a moment
+            docker push $IMAGE:${{ github.sha }}-${{ matrix.arch }} && break
+            [ $try = 3 ] && exit 1
+            sleep 30
+          done
 
   manifest:
     needs: build
