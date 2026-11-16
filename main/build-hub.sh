@@ -10,10 +10,10 @@ cd "$(dirname "$0")"
 
 VENDOR="${1:-${JUPYDO_PATH:-/srv/JupyDo}/builder/vendor}/hub"
 IMAGE="ghcr.io/vehx35/jupydo-hub:${JUPYDO_HUB_TAG:-latest}"
-case "$(uname -m)" in
+case "${HUB_ARCH:-$(uname -m)}" in   # HUB_ARCH=arm64|amd64: the other one (QEMU)
     x86_64|amd64) ARCH=amd64 ;;
     aarch64|arm64) ARCH=arm64 ;;
-    *) echo "ERROR: unsupported architecture $(uname -m)" >&2; exit 1 ;;
+    *) echo "ERROR: unsupported architecture ${HUB_ARCH:-$(uname -m)}" >&2; exit 1 ;;
 esac
 
 for d in "$VENDOR/common" "$VENDOR/$ARCH"; do
@@ -33,5 +33,5 @@ cp "$VENDOR/$ARCH/manifest.txt" hub-vendor/manifest-$ARCH.txt
 cp "$VENDOR/common/manifest.txt" hub-vendor/manifest-common.txt
 
 echo "Building $IMAGE ($ARCH) from the vendored files, without network..."
-docker build --network=none -f Dockerfile.jupyterhub -t "$IMAGE" .
+docker build --network=none --platform "linux/$ARCH" -f Dockerfile.jupyterhub -t "$IMAGE" .
 echo "Built: $IMAGE"
