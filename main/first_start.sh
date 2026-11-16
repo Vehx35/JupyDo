@@ -327,13 +327,14 @@ EOF_TIMER
         DL="$JUPYDO_FULL_PATH/.builder-download"
         mkdir -p "$DL"
         BASE="$JUPYDO_ZENODO/records/$JUPYDO_VENDOR_RECORD/files"
-        if curl -fsSL -o "$DL/SHA256SUMS" "$BASE/SHA256SUMS?download=1"; then
+        ZCURL=(curl -fL --retry 5 --retry-delay 20 -A "JupyDo-installer/1.0 (+https://github.com/Vehx35/JupyDo)")
+        if "${ZCURL[@]}" -sS -o "$DL/SHA256SUMS" "$BASE/SHA256SUMS?download=1"; then
             # the hub image is not needed here: it comes from ghcr.io (see below)
             grep -v ' jupydo-hub-' "$DL/SHA256SUMS" > "$DL/SHA256SUMS.builder"
             BUILDER_OK=yes
             while read -r _ f; do
                 echo "  $f"
-                curl -fL -C - --progress-bar -o "$DL/$f" "$BASE/$f?download=1" || { BUILDER_OK=no; break; }
+                "${ZCURL[@]}" -C - --progress-bar -o "$DL/$f" "$BASE/$f?download=1" || { BUILDER_OK=no; break; }
             done < "$DL/SHA256SUMS.builder"
             if [ "$BUILDER_OK" = yes ] && (cd "$DL" && sha256sum --quiet -c SHA256SUMS.builder); then
                 rm -rf "$BUILDER_DIR.new" && mkdir -p "$BUILDER_DIR.new/vendor"

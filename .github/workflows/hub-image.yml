@@ -40,8 +40,11 @@ jobs:
           [ -n "$RECORD" ] || { echo "::error::JUPYDO_VENDOR_RECORD is not set in main/first_start.sh: publish the builder's vendor bundles on Zenodo first (jupydo-builder scripts/publish-zenodo.py)"; exit 1; }
           BASE="https://zenodo.org/records/$RECORD/files"
           mkdir -p /tmp/zenodo /tmp/vendor
-          curl -fsSL -o /tmp/zenodo/SHA256SUMS "$BASE/SHA256SUMS?download=1"
-          curl -fsSL -o /tmp/zenodo/vendor-hub.tar "$BASE/vendor-hub.tar?download=1"
+          # a User-Agent (Zenodo's firewall refuses anonymous clients), and retries
+          zget() { curl -fsSL --retry 5 --retry-delay 20 --retry-all-errors \
+                     -A "JupyDo-hub-build/1.0 (+https://github.com/$GITHUB_REPOSITORY)" -o "$1" "$2"; }
+          zget /tmp/zenodo/SHA256SUMS "$BASE/SHA256SUMS?download=1"
+          zget /tmp/zenodo/vendor-hub.tar "$BASE/vendor-hub.tar?download=1"
           (cd /tmp/zenodo && grep ' vendor-hub.tar$' SHA256SUMS | sha256sum -c -)
           tar -xf /tmp/zenodo/vendor-hub.tar -C /tmp/vendor
       - name: Build (no network) and push
