@@ -59,8 +59,9 @@ Developed by the **Reproducible Bioinformatics Lab**, University of Turin.
   The builder recognises the image's distribution and architecture and uses only the
   matching bundles; an image is "ready" only if it was built by the current builder
   version and its stack check passes, otherwise it is rebuilt automatically.
-- **Supported bases:** Debian 12 and 13, Ubuntu 20.04, 22.04, 24.04 and 26.04, on amd64 and
-  arm64; images of other kinds are converted onto a supported base.
+- **Supported bases:** Ubuntu 16.04, 18.04, 20.04, 22.04, 24.04, 26.04 and Debian 12, 13, on
+  amd64 and arm64; minimal BioContainers images (BusyBox + conda, no package manager) are
+  first converted onto a Debian 12 base, keeping their software.
 - **Both architectures.** Images of the other architecture also run, through QEMU
   emulation (slower), installed by `first_start.sh`, with `sudo` working inside emulated
   environments.
