@@ -434,7 +434,8 @@ class JupyDoSpawner(DockerSpawner):
 c = get_config()  # noqa: F821
 
 # Resources of a new environment, and what a user may ask for more (approved by an admin)
-DEFAULT_CPUS = 4
+# 4 CPUs, or all of them on a smaller machine (Docker refuses a limit above the host's CPUs)
+DEFAULT_CPUS = min(4, os.cpu_count() or 4)
 DEFAULT_MEM_GB = 16
 
 
