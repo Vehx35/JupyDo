@@ -119,6 +119,7 @@ class JupyDoSpawner(DockerSpawner):
         vscode_checked = " checked" if "vscode" in (self.user_options.get("modules") or []) else ""
         desktop_checked = " checked" if "desktop" in (self.user_options.get("modules") or []) else ""
         igv_checked = " checked" if "igv" in (self.user_options.get("modules") or []) else ""
+        as_is_checked = " checked" if self.user_options.get("as_is") else ""
         cpu_options = "".join(
             f'<option value="{v:g}">{v:g} CPU{" (default)" if v == DEFAULT_CPUS else ""}</option>'
             for v in resource_choices()["cpus"])
@@ -239,6 +240,31 @@ class JupyDoSpawner(DockerSpawner):
             </div>
         </div>
 
+        <div class="form-group" style="margin-top:15px;">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="as_is" id="as_is" value="1"{as_is_checked}
+                       onchange="jupydoAsIs(this.checked)">
+                <label class="form-check-label" for="as_is">
+                    Use the image as it is (no JupyDo build)
+                </label>
+                <div class="form-text">
+                    For special images you prepared yourself. The image must start a JupyterHub
+                    single-user server by itself (e.g. <code>jupyterhub-singleuser</code>, as the
+                    jupyter/* images do). Your shared folder, the CPU/RAM limits and the GPU work as
+                    usual; the JupyDo additions do not: modules, cell log, notifications bar, the
+                    %%job magic, the self-test.
+                </div>
+            </div>
+        </div>
+        <script>
+            function jupydoAsIs(on) {{
+                document.querySelectorAll('input[name^="module_"]').forEach(function (b) {{
+                    b.disabled = on; if (on) b.checked = false;
+                }});
+            }}
+            jupydoAsIs(document.getElementById("as_is").checked);
+        </script>
+
         <script>
             const JUPYDO_SAVED = {saved_json};
             const JUPYDO_CURRENT = {json.dumps(current)};
@@ -283,8 +309,12 @@ class JupyDoSpawner(DockerSpawner):
         else:
             raise ValueError("Please select an environment.")
 
-        modules = [m for m in ("apptainer", "rstudio", "vscode", "desktop", "igv") if formdata.get(f"module_{m}")]
+        as_is = bool(formdata.get("as_is"))
+        modules = [] if as_is else [m for m in ("apptainer", "rstudio", "vscode", "desktop", "igv")
+                                    if formdata.get(f"module_{m}")]
         options = {"image": image, "modules": modules}
+        if as_is:
+            options["as_is"] = True   # started as it is: no JupyDo build
         if formdata.get("req_gpu"):
             options["gpu_request"] = {"note": formdata.get("req_gpu_note", [""])[0].strip()[:500]}
         # more CPU/RAM than the defaults: asked to the admins once the environment exists
@@ -350,13 +380,19 @@ class JupyDoSpawner(DockerSpawner):
 
         try:
             await self.pull_any_platform(requested, emit)
-            modules = self.user_options.get("modules") or []
-            final = await asyncio.get_running_loop().run_in_executor(
-                None, jupydo_builder.ensure_jupydo_image, requested, emit, modules)
-            # Docker options the image's modules need (from its label: also images saved
-            # with Commit from an environment with a module). Only for this new container.
-            module_options = await asyncio.get_running_loop().run_in_executor(
-                None, jupydo_builder.module_host_config, final)
+            if self.user_options.get("as_is"):
+                # "Use the image as it is": no JupyDo build, the image's own entrypoint and
+                # command (it must start a JupyterHub single-user server by itself)
+                emit(f"Starting {requested} as it is (no JupyDo build)", 50)
+                final, module_options = requested, {}
+            else:
+                modules = self.user_options.get("modules") or []
+                final = await asyncio.get_running_loop().run_in_executor(
+                    None, jupydo_builder.ensure_jupydo_image, requested, emit, modules)
+                # Docker options the image's modules need (from its label: also images saved
+                # with Commit from an environment with a module). Only for this new container.
+                module_options = await asyncio.get_running_loop().run_in_executor(
+                    None, jupydo_builder.module_host_config, final)
         finally:
             self._build_done = True
         if not hasattr(self, "_base_host_config"):

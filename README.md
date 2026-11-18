@@ -78,6 +78,11 @@ Developed by the **Reproducible Bioinformatics Lab**, University of Turin.
   about 15,000 bioinformatics images (BioContainers, StaPH-B, trusted organizations,
   Docker Hub). "Use this image" fills in the form. The model is started only while
   someone uses the assistant. See [JupyDo-Assistant](https://github.com/ReproducibleBioinformatics/JupyDo-Assistant).
+- **"Use the image as it is"** (a check box in the form): no JupyDo build, the image starts
+  with its own entrypoint and command, for special images prepared by hand. The image must
+  start a JupyterHub single-user server by itself; the shared folder, CPU/RAM limits and GPU
+  work as usual, the JupyDo additions (modules, cell log, notifications bar, `%%job`,
+  self-test) are not there.
 - **Self-test and examples.** Every user gets in their folder a self-test notebook that
   checks an environment (it adapts to what the environment contains) and example
   notebooks for the job queue (Python, R, GPU) and, with the Apptainer module, an
