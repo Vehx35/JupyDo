@@ -1,5 +1,6 @@
 # Configuration file for JupyterHub
 import asyncio
+import hashlib
 import html
 import json
 import os
@@ -65,6 +66,39 @@ def create_shared_dir(spawner):
     if line not in existing:
         with open(map_file, 'w') as f:
             f.write(existing + line)
+
+
+BUILD_TOOLS = ("gcc", "g++", "gfortran", "make", "pkg-config")
+
+
+def jupydo_tell_left_out(spawner, image, left, emit):
+    """The JupyDo builder never removes software of the image: when a module, or one of
+    the build tools, could not be added without doing so, it is left out and the
+    environment is built anyway. The user is told once per environment and image (on the
+    spawn page, on the hub home and in the JupyterLab bar). Other JupyDo packages left out
+    (e.g. -dev libraries the image has in another variant) are only in the build log."""
+    mods = left.get("modules") or []
+    tools = [p for p in left.get("packages") or [] if p in BUILD_TOOLS]
+    if not mods and not tools:
+        return
+    env = spawner.name or "default"
+    parts = []
+    if mods:
+        parts.append("the module" + ("s " if len(mods) > 1 else " ") + ", ".join(mods)
+                     + (" were" if len(mods) > 1 else " was") + " not added")
+    if tools:
+        parts.append("the build tool" + ("s " if len(tools) > 1 else " ") + ", ".join(tools)
+                     + (" are" if len(tools) > 1 else " is") + " missing")
+    text = (f"Environment '{env}' ({image}): " + " and ".join(parts) + ", because adding "
+            + ("them" if len(mods) + len(tools) > 1 else "it") + " would have removed software of the "
+            "image itself. Everything else works. " + ("For the missing module, try another image or "
+            "ask an administrator." if mods else ""))
+    emit("WARNING: " + text, 95)
+    msg_id = "leftout-" + hashlib.sha1(f"{spawner.user.name}|{env}|{image}".encode()).hexdigest()[:12]
+    if not any(m["id"] == msg_id for m in jupydo_ui.load_notifications()["messages"]):
+        jupydo_ui.add_notification([spawner.user.name], text.strip(), level="warning", sender="JupyDo",
+                                   msg_id=msg_id)
+        jupydo_ui.refresh_user_branding(spawner.user.name, server_display_name, logo_file)
 
 
 # Define the custom spawner class
@@ -393,6 +427,9 @@ class JupyDoSpawner(DockerSpawner):
                 # with Commit from an environment with a module). Only for this new container.
                 module_options = await asyncio.get_running_loop().run_in_executor(
                     None, jupydo_builder.module_host_config, final)
+                # what the build had to leave out not to break the image: told to the user
+                left = await asyncio.get_running_loop().run_in_executor(None, jupydo_builder.left_out, final)
+                jupydo_tell_left_out(self, final, left, emit)
         finally:
             self._build_done = True
         if not hasattr(self, "_base_host_config"):

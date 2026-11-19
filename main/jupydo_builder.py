@@ -91,6 +91,26 @@ def _run(client, image, entrypoint, command):
         c.remove(force=True)
 
 
+def left_out(image):
+    """What the build left out of the image so as not to remove software of the image
+    itself (see the builder's Dockerfile): {"modules": [...], "packages": [...],
+    "online": [...]} from /opt/jupydo/modules-skipped.txt, apt-skipped.txt (JupyDo's
+    packages not installed) and apt-online.txt (taken from the distribution's archive)."""
+    files = {"modules": "modules-skipped", "packages": "apt-skipped", "online": "apt-online"}
+    script = "; ".join(f'echo "== {k}"; cat /opt/jupydo/{f}.txt 2>/dev/null' for k, f in files.items())
+    try:
+        _, out = _run(docker.from_env(), image, "/bin/sh", ["-c", script])
+    except Exception:  # noqa: BLE001 - only used for a warning
+        return {k: [] for k in files}
+    result, current = {k: [] for k in files}, None
+    for line in out.splitlines():
+        if line.startswith("== "):
+            current = line[3:].strip()
+        elif current in result and line.strip():
+            result[current].append(line.strip())
+    return result
+
+
 def _check(client, image, modules=()):
     """Strict readiness: built by the current builder for its platform and modules,
     with every requested module, and stack check passing."""
