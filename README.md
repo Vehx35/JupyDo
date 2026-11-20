@@ -251,8 +251,8 @@ reliable ones.
 - A **Linux** server (Ubuntu or Debian recommended), amd64 or arm64.
 - **Docker Engine** with **Docker Compose**.
 - Standard tools found on any Linux: `curl`, `sha256sum`, `tar`, `python3`.
-- Installed by `first_start.sh` when needed: **QEMU** emulation (`qemu-user-static`,
-  `binfmt-support`, for images of the other architecture) and, only if the command log
+- Installed by `first_start.sh` when needed: **QEMU** emulation (for images of the other
+  architecture: always QEMU 10.2.3, from a pinned image, registered at every boot) and, only if the command log
   is enabled, **auditd**. On systems with AppArmor, a profile for the Apptainer module.
 - Disk: about 16 GB for the builder's bundles, plus the users' data and images.
 - NVIDIA GPUs (optional) need the NVIDIA Container Toolkit.

@@ -35,44 +35,59 @@ if ! docker compose version &> /dev/null; then
     exit 1
 fi
 
-# QEMU emulation: lets JupyDo run images of the other architecture (arm64 images
-# on an amd64 server and vice versa), slower. Installed once, stays after reboots.
-# Checks the PACKAGE, not whether emulation is active right now: an emulation
-# enabled by hand (docker run tonistiigi/binfmt ...) disappears at the next reboot.
-if ! dpkg -s qemu-user-static >/dev/null 2>&1; then
-    echo "Installing QEMU emulation (images of the other architecture)..."
-    if command -v apt-get &> /dev/null; then
-        apt-get update -qq && apt-get install -y -qq qemu-user-static binfmt-support \
-            || echo "WARNING: QEMU installation failed: images of the other architecture will not run."
-    else
-        echo "WARNING: apt-get not found: install qemu-user-static by hand to run images of the other architecture."
-    fi
+# QEMU emulation: lets JupyDo run images of the other architecture (arm64 images on an
+# amd64 server and vice versa), slower. Always the same QEMU, on every server: the
+# static one of a pinned image (QEMU 10.2.3; the distributions' QEMU crashes on some
+# programs, e.g. Ubuntu 24.04's 8.2), kept in /usr/local/lib/jupydo/qemu and registered
+# at every boot (utils/qemu-register.sh, run by a systemd service) with the flags F
+# (works inside containers) and C (sudo works in emulated containers). Same QEMU and
+# same service as the JupyDo builder's setup-host.sh.
+QEMU_IMAGE="tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0"
+QEMU_VERSION="10.2.3"
+QEMU_DIR=/usr/local/lib/jupydo/qemu
+case "$(uname -m)" in
+    x86_64) QEMU_OTHER=aarch64 ;;
+    aarch64) QEMU_OTHER=x86_64 ;;
+    *) QEMU_OTHER="" ;;
+esac
+if [ -z "$QEMU_OTHER" ]; then
+    echo "WARNING: unsupported machine $(uname -m): no emulation of the other architecture."
+elif "$QEMU_DIR/qemu-$QEMU_OTHER" --version 2>/dev/null | grep -q "version ${QEMU_VERSION}"; then
+    echo "QEMU emulation already installed (QEMU ${QEMU_VERSION}). Skipping."
 else
-    echo "QEMU emulation already installed. Skipping."
+    echo "Installing QEMU emulation (images of the other architecture, QEMU ${QEMU_VERSION})..."
+    if docker pull -q "$QEMU_IMAGE" >/dev/null && QEMU_CID="$(docker create "$QEMU_IMAGE")"; then
+        mkdir -p "$QEMU_DIR"
+        docker cp "$QEMU_CID:/usr/bin/qemu-$QEMU_OTHER" "$QEMU_DIR/qemu-$QEMU_OTHER"
+        docker rm "$QEMU_CID" >/dev/null
+    else
+        echo "WARNING: QEMU could not be downloaded: images of the other architecture will not run."
+    fi
 fi
-
-# sudo in emulated containers: QEMU registered with the "C" (credentials) flag, at
-# every boot (utils/qemu-binfmt-credentials.sh, run by a systemd service after the
-# system registered the emulators)
-if dpkg -s qemu-user-static >/dev/null 2>&1 && command -v systemctl &> /dev/null; then
-    install -D -m 755 ./utils/qemu-binfmt-credentials.sh /usr/local/lib/jupydo/qemu-binfmt-credentials.sh
-    cat > /etc/systemd/system/jupydo-qemu-credentials.service <<'EOF_UNIT'
+if [ -x "$QEMU_DIR/qemu-$QEMU_OTHER" ] && command -v systemctl &> /dev/null; then
+    install -D -m 755 ./utils/qemu-register.sh /usr/local/lib/jupydo/qemu-register.sh
+    # the service of older versions (the system's QEMU plus the "C" flag): replaced
+    if [ -f /etc/systemd/system/jupydo-qemu-credentials.service ]; then
+        systemctl disable jupydo-qemu-credentials.service >/dev/null 2>&1 || true
+        rm -f /etc/systemd/system/jupydo-qemu-credentials.service /usr/local/lib/jupydo/qemu-binfmt-credentials.sh
+    fi
+    cat > /etc/systemd/system/jupydo-qemu.service <<'EOF_UNIT'
 [Unit]
-Description=JupyDo: QEMU emulators with the credentials flag (sudo in emulated containers)
+Description=JupyDo: QEMU emulator for the other architecture (flags F and C)
 After=systemd-binfmt.service binfmt-support.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/local/lib/jupydo/qemu-binfmt-credentials.sh
+ExecStart=/usr/local/lib/jupydo/qemu-register.sh
 
 [Install]
 WantedBy=multi-user.target
 EOF_UNIT
     systemctl daemon-reload
-    systemctl enable jupydo-qemu-credentials.service >/dev/null 2>&1
-    systemctl restart jupydo-qemu-credentials.service
-    echo "QEMU: sudo enabled in emulated containers (flags: $(sed -n 's/^flags: //p' /proc/sys/fs/binfmt_misc/qemu-aarch64 2>/dev/null))"
+    systemctl enable jupydo-qemu.service >/dev/null 2>&1
+    systemctl restart jupydo-qemu.service
+    echo "QEMU: $(sed -n 's/^interpreter //p' "/proc/sys/fs/binfmt_misc/qemu-$QEMU_OTHER" 2>/dev/null), flags $(sed -n 's/^flags: //p' "/proc/sys/fs/binfmt_misc/qemu-$QEMU_OTHER" 2>/dev/null)"
 fi
 
 # Creating Docker network (only once)
