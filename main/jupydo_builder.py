@@ -92,11 +92,13 @@ def _run(client, image, entrypoint, command):
 
 
 def left_out(image):
-    """What the build left out of the image so as not to remove software of the image
-    itself (see the builder's Dockerfile): {"modules": [...], "packages": [...],
-    "online": [...]} from /opt/jupydo/modules-skipped.txt, apt-skipped.txt (JupyDo's
+    """What the build left out of the image (see the builder's Dockerfile): {"modules":
+    [...], "failed": [...], "packages": [...], "online": [...]} from
+    /opt/jupydo/modules-skipped.txt (modules that would remove software of the image),
+    modules-failed.txt (modules whose installation failed), apt-skipped.txt (JupyDo's
     packages not installed) and apt-online.txt (taken from the distribution's archive)."""
-    files = {"modules": "modules-skipped", "packages": "apt-skipped", "online": "apt-online"}
+    files = {"modules": "modules-skipped", "failed": "modules-failed", "packages": "apt-skipped",
+             "online": "apt-online"}
     script = "; ".join(f'echo "== {k}"; cat /opt/jupydo/{f}.txt 2>/dev/null' for k, f in files.items())
     try:
         _, out = _run(docker.from_env(), image, "/bin/sh", ["-c", script])

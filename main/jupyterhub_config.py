@@ -74,25 +74,34 @@ BUILD_TOOLS = ("gcc", "g++", "gfortran", "make", "pkg-config")
 def jupydo_tell_left_out(spawner, image, left, emit):
     """The JupyDo builder never removes software of the image: when a module, or one of
     the build tools, could not be added without doing so, it is left out and the
-    environment is built anyway. The user is told once per environment and image (on the
-    spawn page, on the hub home and in the JupyterLab bar). Other JupyDo packages left out
+    environment is built anyway; a module whose installation failed for another reason
+    is left out too. The user is told once per environment and image (on the spawn
+    page, on the hub home and in the JupyterLab bar). Other JupyDo packages left out
     (e.g. -dev libraries the image has in another variant) are only in the build log."""
     mods = left.get("modules") or []
+    failed = left.get("failed") or []
     tools = [p for p in left.get("packages") or [] if p in BUILD_TOOLS]
-    if not mods and not tools:
+    if not mods and not tools and not failed:
         return
     env = spawner.name or "default"
-    parts = []
-    if mods:
-        parts.append("the module" + ("s " if len(mods) > 1 else " ") + ", ".join(mods)
-                     + (" were" if len(mods) > 1 else " was") + " not added")
-    if tools:
-        parts.append("the build tool" + ("s " if len(tools) > 1 else " ") + ", ".join(tools)
-                     + (" are" if len(tools) > 1 else " is") + " missing")
-    text = (f"Environment '{env}' ({image}): " + " and ".join(parts) + ", because adding "
-            + ("them" if len(mods) + len(tools) > 1 else "it") + " would have removed software of the "
-            "image itself. Everything else works. " + ("For the missing module, try another image or "
-            "ask an administrator." if mods else ""))
+    sentences = []
+    if mods or tools:
+        parts = []
+        if mods:
+            parts.append("the module" + ("s " if len(mods) > 1 else " ") + ", ".join(mods)
+                         + (" were" if len(mods) > 1 else " was") + " not added")
+        if tools:
+            parts.append("the build tool" + ("s " if len(tools) > 1 else " ") + ", ".join(tools)
+                         + (" are" if len(tools) > 1 else " is") + " missing")
+        sentences.append(" and ".join(parts) + ", because adding "
+                         + ("them" if len(mods) + len(tools) > 1 else "it")
+                         + " would have removed software of the image itself.")
+    if failed:
+        sentences.append("the installation of the module" + ("s " if len(failed) > 1 else " ")
+                         + ", ".join(failed) + " failed.")
+    text = (f"Environment '{env}' ({image}): " + " ".join(s[0].upper() + s[1:] for s in sentences)
+            + " Everything else works." + (" For the missing module, try another image or ask an "
+            "administrator." if mods or failed else ""))
     emit("WARNING: " + text, 95)
     msg_id = "leftout-" + hashlib.sha1(f"{spawner.user.name}|{env}|{image}".encode()).hexdigest()[:12]
     if not any(m["id"] == msg_id for m in jupydo_ui.load_notifications()["messages"]):
