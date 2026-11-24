@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](LICENSE)
 [![Status](https://img.shields.io/badge/Status-Work_In_Progress-orange)]()
 [![Docker](https://img.shields.io/badge/Container-Docker-2496ED?logo=docker)]()
-[![Builder bundles](https://zenodo.org/badge/DOI/10.5281/zenodo.24365831.svg)](https://doi.org/10.5281/zenodo.24365831)
+[![Builder bundles](https://zenodo.org/badge/DOI/10.5281/zenodo.24498197.svg)](https://doi.org/10.5281/zenodo.24498197)
 
 </div>
 
@@ -233,7 +233,7 @@ reliable ones.
   libraries, build tools, base images; for every supported distribution and both
   architectures) are made once by the [JupyDo builder](https://github.com/ReproducibleBioinformatics/Jupydo_Builder)
   and **published on Zenodo**, each version with its DOI (current:
-  [10.5281/zenodo.24365831](https://doi.org/10.5281/zenodo.24365831)). `first_start.sh` downloads
+  [10.5281/zenodo.24498197](https://doi.org/10.5281/zenodo.24498197)). `first_start.sh` downloads
   the chosen version and checks every file against its SHA-256: no copy by hand, and
   every installation of the same version builds the same environments.
 - **The hub image is built only from vendored files** (base image pinned by digest,

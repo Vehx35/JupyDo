@@ -329,7 +329,7 @@ EOF_TIMER
     # environments, also offline): from the Zenodo record below, published with
     # jupydo-builder's scripts/publish-zenodo.py. Every file is checked against the
     # record's SHA256SUMS; nothing is downloaded again if that record is already in place.
-    JUPYDO_VENDOR_RECORD="24365831"   # Zenodo record id of the builder version to install (doi:10.5281/zenodo.24365831)
+    JUPYDO_VENDOR_RECORD="24498197"   # Zenodo record id of the builder version to install (doi:10.5281/zenodo.24498197)
     JUPYDO_ZENODO="https://zenodo.org"
     BUILDER_DIR="$JUPYDO_FULL_PATH/builder"
     if [ -z "$JUPYDO_VENDOR_RECORD" ]; then
