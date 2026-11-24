@@ -297,8 +297,9 @@ installation: replace them with your own.
   docker compose up -d` for the hub image only). Restarting the hub stops the running
   environments: users start them again from the hub home (containers and data are kept).
 - **Try a branch before merging:** GitHub builds a hub image for every branch,
-  `ghcr.io/vehx35/jupydo-hub:<branch>` (`latest` is only `main`). Set
-  `JUPYDO_HUB_TAG=<branch>` in `.env` (or in the shell) and `docker compose up -d`.
+  `ghcr.io/vehx35/jupydo-hub:<branch>` (`latest` is only `main`). Install or update with
+  `sudo JUPYDO_HUB_TAG=<branch> ./first_start.sh`: the tag is written in `.env` and kept by
+  later runs (remove the `JUPYDO_HUB_TAG` line from `.env` to go back to `latest`).
 - **Build the hub image here, offline:** `./build-hub.sh [vendor folder]` (default
   `$JUPYDO_PATH/builder/vendor`).
 

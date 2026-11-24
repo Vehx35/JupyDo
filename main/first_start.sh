@@ -212,6 +212,13 @@ done
     mkdir -p "$STATE_PATH"
     mkdir -p "$JUPYDO_FULL_PATH/jh_shared" # Crea anche la cartella per i dati condivisi
 
+    # The hub image of a branch to try (JUPYDO_HUB_TAG, see compose.yaml): given in the
+    # shell or already in .env, it is kept when .env is written again
+    HUB_TAG="${JUPYDO_HUB_TAG:-}"
+    if [ -z "$HUB_TAG" ] && [ -f .env ]; then
+        HUB_TAG="$(grep '^JUPYDO_HUB_TAG=' .env | cut -d= -f2-)"
+    fi
+
     # 2. Popola il file .env con tutte le variabili
     echo "JUPYDO_DATA_PATH=$STATE_PATH" > .env
     echo "JUPYDO_PATH=$JUPYDO_FULL_PATH" >> .env
@@ -224,6 +231,9 @@ done
         echo "JUPYDO_GITHUB_CLIENT_ID=$GH_CLIENT_ID" >> .env
         echo "JUPYDO_GITHUB_CLIENT_SECRET=$GH_CLIENT_SECRET" >> .env
         echo "JUPYDO_GITHUB_ORG=$GH_ORG" >> .env
+    fi
+    if [ -n "$HUB_TAG" ]; then
+        echo "JUPYDO_HUB_TAG=$HUB_TAG" >> .env
     fi
     chmod 600 .env  # it may contain the GitHub secret
 
